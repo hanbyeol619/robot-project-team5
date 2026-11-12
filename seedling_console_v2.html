@@ -1,0 +1,1013 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>묘목 식재 로봇 관제</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/roslib@1.4.1/build/roslib.min.js"></script>
+<style>
+:root{
+  --bg:#E4EAE1; --surface:#F7F9F4; --surface2:#EDF2EA; --map:#F0F4EC;
+  --ink:#1D2A20; --ink2:#566559; --line:#C6D1C2;
+  --soil:#7A5A40; --soilbg:#E8DCCD; --soildot:#B89A7C;
+  --leaf:#3B7A4A; --leaf2:#5E9E5F; --leafbg:#DAEADB; --trunk:#7A5232;
+  --amber:#A8730F; --amberbg:#F6E8C8;
+  --steel:#5A6C7E; --steel2:#8FA0B2;
+  --danger:#B3261E; --dangerbg:#F7DEDB; --onaccent:#FFFFFF; --camBg:#1B221D;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#111712; --surface:#192119; --surface2:#202A21; --map:#151C16;
+    --ink:#E2EAE0; --ink2:#9CAA9E; --line:#334035;
+    --soil:#C49A73; --soilbg:#2A231C; --soildot:#7C6650;
+    --leaf:#6CB27D; --leaf2:#8BC98F; --leafbg:#1D3223; --trunk:#A97A52;
+    --amber:#E3AE45; --amberbg:#3A2E15;
+    --steel:#9DB0C3; --steel2:#5F7184;
+    --danger:#EE5E54; --dangerbg:#3D1D1A; --onaccent:#FFFFFF; --camBg:#0B0F0C;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#111712; --surface:#192119; --surface2:#202A21; --map:#151C16;
+  --ink:#E2EAE0; --ink2:#9CAA9E; --line:#334035;
+  --soil:#C49A73; --soilbg:#2A231C; --soildot:#7C6650;
+  --leaf:#6CB27D; --leaf2:#8BC98F; --leafbg:#1D3223; --trunk:#A97A52;
+  --amber:#E3AE45; --amberbg:#3A2E15;
+  --steel:#9DB0C3; --steel2:#5F7184;
+  --danger:#EE5E54; --dangerbg:#3D1D1A; --onaccent:#FFFFFF; --camBg:#0B0F0C;
+  color-scheme: dark;
+}
+*,*::before,*::after{box-sizing:border-box}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:"IBM Plex Sans KR",system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  font-size:15px;line-height:1.55;font-variant-numeric:tabular-nums}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--surface)}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--leaf);outline-offset:2px}
+
+header{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--surface);border-bottom:1px solid var(--line);
+  display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px;padding:12px clamp(14px,3vw,28px)}
+.brand{display:flex;flex-direction:column;margin-right:auto;min-width:0}
+.brand h1{margin:0;font-size:1.25rem;font-weight:700;letter-spacing:-.01em}
+.brand span{color:var(--ink2);font-size:.85rem}
+.state{display:flex;align-items:center;gap:8px;font-weight:600;padding:6px 12px;border-radius:999px;background:var(--surface2);border:1px solid var(--line)}
+.state i{width:10px;height:10px;border-radius:50%;background:var(--leaf);display:block}
+.state[data-s="busy"] i{background:var(--amber);animation:blink 1s infinite}
+.state[data-s="paused"] i{background:var(--amber)}
+.state[data-s="estop"]{background:var(--dangerbg);border-color:var(--danger);color:var(--danger)}
+.state[data-s="estop"] i{background:var(--danger)}
+@keyframes blink{50%{opacity:.25}}
+.estop{border:none;background:var(--danger);color:var(--onaccent);font-weight:700;font-size:1.05rem;
+  padding:12px 22px;border-radius:14px;box-shadow:0 0 0 4px var(--dangerbg);min-width:140px}
+.estop:hover{filter:brightness(1.08)}
+.estop.reset{background:var(--surface2);color:var(--danger);box-shadow:inset 0 0 0 2px var(--danger)}
+
+main{display:grid;grid-template-columns:minmax(0,1.75fr) minmax(300px,1fr);gap:18px;padding:18px clamp(14px,3vw,28px) 28px;max-width:1480px;margin:0 auto}
+@media (max-width:1020px){main{grid-template-columns:minmax(0,1fr)}}
+.col{display:flex;flex-direction:column;gap:18px;min-width:0}
+section.panel{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px 18px}
+.panel h2{margin:0 0 10px;font-size:1.02rem;font-weight:700}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.muted{color:var(--ink2);font-size:.86rem}
+
+.maphead{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:baseline;margin-bottom:10px}
+.maphead h2{margin:0;margin-right:auto}
+.stat{font-size:.9rem;color:var(--ink2)}
+.stat b{color:var(--ink);font-size:1.05rem}
+.stage{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:14px}
+@media (max-width:760px){.stage{grid-template-columns:minmax(0,1fr)}}
+.mapwrap{background:var(--map);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+svg#map{display:block;width:100%;height:auto;user-select:none}
+.zone{fill:var(--soilbg);stroke:var(--soil);stroke-width:2}
+.zonelabel{fill:var(--ink);font-size:17px;font-weight:600}
+.hole{fill:var(--soil);fill-opacity:.12;stroke:var(--soildot);stroke-width:2;stroke-dasharray:6 5}
+.spotid{fill:var(--soil);font-size:15px;font-weight:700}
+.tray{fill:var(--surface);fill-opacity:.55;stroke:var(--soildot);stroke-width:1.5;stroke-dasharray:4 4}
+.traylabel{fill:var(--ink2);font-size:12px;font-weight:600}
+.supid{fill:var(--ink2);font-size:11px;font-weight:700}
+.tree{transform-box:fill-box;transform-origin:50% 100%;transform:scale(0);transition:transform .55s cubic-bezier(.2,1.4,.4,1)}
+.tree.show{transform:scale(1)}
+.trunk{fill:var(--trunk)}
+.canopy{fill:var(--leaf)} .canopy2{fill:var(--leaf2)}
+.box{fill:none;stroke-width:2.5;opacity:0;transition:opacity .2s}
+.box.on{opacity:1}
+.box.ok{stroke:var(--leaf)} .box.empty{stroke:var(--amber)} .box.target{stroke:var(--amber);stroke-dasharray:7 5}
+.tagbg{fill:var(--surface);opacity:.92}
+.tag{font-size:12.5px;font-weight:600}
+.tag.ok{fill:var(--leaf)} .tag.empty{fill:var(--amber)}
+.sweep{stroke:var(--amber);stroke-width:3;opacity:.85}
+.sweepfill{fill:var(--amber);opacity:.1}
+.armlink{stroke:var(--steel);stroke-linecap:round}
+.armjoint{fill:var(--surface);stroke:var(--steel);stroke-width:4}
+.base{fill:var(--surface2);stroke:var(--steel);stroke-width:5}
+.basein{fill:var(--steel2)}
+.grip{stroke:var(--steel);stroke-width:5;stroke-linecap:round}
+.zshadow{fill:none;stroke:var(--steel);stroke-width:1.5;stroke-dasharray:3 4;opacity:.7}
+.maplegend{display:flex;flex-wrap:wrap;gap:6px 16px;padding:8px 2px 0}
+.maplegend span{display:flex;align-items:center;gap:6px;font-size:.84rem;color:var(--ink2)}
+.maplegend i{width:12px;height:12px;border-radius:3px;display:block;border:2.5px solid}
+
+.cam{position:relative;background:var(--camBg);border-radius:14px;overflow:hidden;min-height:240px;display:flex;flex-direction:column}
+.camhead{display:flex;align-items:center;gap:8px;padding:9px 12px;color:#E2EAE0;font-size:.88rem;font-weight:600;background:rgba(255,255,255,.06)}
+.camhead .dot{width:9px;height:9px;border-radius:50%;background:#6B7A6E}
+.camhead .dot.live{background:#E5584F;animation:blink 1.4s infinite}
+.camhead .fps{margin-left:auto;font-weight:500;color:#9CAA9E}
+.camview{flex:1;position:relative;display:grid;place-items:center;aspect-ratio:4/3}
+.camview img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:none}
+.camview img.on{display:block}
+.cammsg{color:#9CAA9E;font-size:.9rem;text-align:center;padding:18px;max-width:300px}
+
+.tabs{display:flex;gap:6px;overflow-x:auto;border-bottom:1px solid var(--line);margin:-4px -4px 14px;padding:0 4px}
+.tab{background:none;border:none;padding:10px 12px 11px;border-bottom:3px solid transparent;font-weight:600;color:var(--ink2);white-space:nowrap;display:flex;gap:7px;align-items:center}
+.tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--leaf)}
+.tab small{font-size:.72rem;font-weight:600;padding:1px 7px;border-radius:999px;background:var(--surface2);border:1px solid var(--line)}
+.tab small.top{background:var(--leafbg);border-color:var(--leaf);color:var(--leaf)}
+[role="tabpanel"][hidden]{display:none}
+.field{display:flex;flex-direction:column;gap:4px;font-size:.86rem;color:var(--ink2)}
+.field input,.field select{background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:8px 10px;min-width:120px;color:var(--ink)}
+.btn{border:1px solid var(--line);background:var(--surface2);border-radius:10px;padding:9px 14px;font-weight:600}
+.btn:hover{border-color:var(--ink2)}
+.btn.primary{background:var(--leaf);border-color:var(--leaf);color:var(--onaccent)}
+.btn.primary:hover{filter:brightness(1.07)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.steps{list-style:none;margin:14px 0 0;padding:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+@media (max-width:640px){.steps{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.steps li{border:1px solid var(--line);border-radius:10px;padding:9px 10px;background:var(--surface2);font-size:.86rem}
+.steps li b{display:block;font-size:.92rem;color:var(--ink)}
+.steps li span{color:var(--ink2)}
+.steps li[data-s="run"]{border-color:var(--amber);background:var(--amberbg)}
+.steps li[data-s="done"]{border-color:var(--leaf);background:var(--leafbg)}
+.steps li[data-s="fail"]{border-color:var(--danger);background:var(--dangerbg)}
+
+.voicebar{display:flex;gap:8px;align-items:stretch}
+.mic{flex:none;width:52px;border-radius:12px;border:1px solid var(--line);background:var(--surface2);display:grid;place-items:center}
+.mic.on{background:var(--danger);border-color:var(--danger);color:var(--onaccent)}
+.voicebar input{flex:1;min-width:0;background:var(--surface2);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.chip{border:1px dashed var(--line);background:none;border-radius:999px;padding:5px 11px;font-size:.86rem;color:var(--ink2)}
+.chip:hover{color:var(--ink);border-color:var(--ink2)}
+.chat{margin-top:12px;display:flex;flex-direction:column;gap:8px;max-height:220px;overflow-y:auto}
+.bubble{max-width:85%;padding:8px 12px;border-radius:12px;font-size:.92rem}
+.bubble.me{align-self:flex-end;background:var(--leafbg);border:1px solid var(--leaf)}
+.bubble.bot{align-self:flex-start;background:var(--surface2);border:1px solid var(--line)}
+.plan{margin-top:12px;border:2px solid var(--amber);background:var(--amberbg);border-radius:12px;padding:12px 14px}
+.plan h3{margin:0 0 4px;font-size:.98rem}
+.plan p{margin:0 0 10px;font-size:.9rem}
+
+.conn .badge,.badge{font-size:.8rem;font-weight:700;padding:3px 9px;border-radius:999px;background:var(--surface2);border:1px solid var(--line)}
+.badge.ros,.badge.live{background:var(--leafbg);border-color:var(--leaf);color:var(--leaf)}
+.badge.warn{background:var(--amberbg);border-color:var(--amber);color:var(--amber)}
+.conn input,.adv input{flex:1;min-width:160px;background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+details.adv{margin-top:10px;font-size:.88rem}
+details.adv summary{cursor:pointer;color:var(--ink2);font-weight:600}
+details.adv label{display:flex;flex-direction:column;gap:4px;margin-top:8px;color:var(--ink2)}
+.joints{display:grid;grid-template-columns:auto 1fr auto;gap:6px 10px;align-items:center;font-size:.9rem}
+.bar{height:8px;background:var(--surface2);border:1px solid var(--line);border-radius:99px;position:relative;overflow:hidden}
+.bar::after{content:"";position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--line)}
+.bar i{position:absolute;top:0;bottom:0;background:var(--steel);border-radius:99px}
+.jv{text-align:right;min-width:62px}
+.tcp{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
+.tcp div{background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:6px 10px;font-size:.82rem;color:var(--ink2)}
+.tcp b{display:block;font-size:1.02rem;color:var(--ink)}
+.ctrl{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.speed{display:flex;align-items:center;gap:10px;margin-top:12px;font-size:.9rem}
+.speed input{flex:1;accent-color:var(--leaf)}
+.log{list-style:none;margin:0;padding:0;max-height:260px;overflow-y:auto;font-size:.86rem;display:flex;flex-direction:column;gap:4px}
+.log li{display:grid;grid-template-columns:auto 1fr;gap:10px;padding:5px 2px;border-bottom:1px solid var(--line)}
+.log time{color:var(--ink2)}
+.log li.warn span{color:var(--amber)} .log li.danger span{color:var(--danger);font-weight:600} .log li.ok span{color:var(--leaf)}
+.note{font-size:.82rem;color:var(--ink2);margin:10px 0 0}
+@media (prefers-reduced-motion:reduce){.state[data-s="busy"] i,.camhead .dot.live{animation:none}.tree{transition:none}}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <h1>묘목 식재 로봇 관제</h1>
+    <span>로봇프로젝트 5팀 · 두산 협동로봇</span>
+  </div>
+  <div class="state" id="state" data-s="idle" role="status" aria-live="polite"><i></i><span id="stateText">대기 중</span></div>
+  <button class="estop" id="estop" title="Esc 키로도 누를 수 있어요">비상정지</button>
+</header>
+
+<main>
+  <div class="col">
+    <section class="panel" aria-labelledby="mapTitle">
+      <div class="maphead">
+        <h2 id="mapTitle">작업대</h2>
+        <span class="stat">식재 <b id="stPlanted">0</b>/4자리</span>
+        <span class="stat">남은 묘목 <b id="stSupply">3</b>개</span>
+        <button class="btn" id="resetBtn">작업대 초기화</button>
+      </div>
+      <div class="stage">
+        <div>
+          <div class="mapwrap">
+            <svg id="map" viewBox="0 0 460 470" role="img" aria-label="식재 구역을 위에서 본 모습: 묘목 자리 F, G, H, I와 아래쪽 로봇팔">
+              <rect class="zone" x="40" y="40" width="380" height="300" rx="14"/>
+              <text class="zonelabel" x="230" y="28" text-anchor="middle">식재 구역</text>
+              <g id="spots"></g>
+              <g id="fx"></g>
+              <g id="arm"></g>
+            </svg>
+          </div>
+          <div class="maplegend" aria-hidden="true">
+            <span><i style="border-color:var(--leaf)"></i>묘목 있음</span>
+            <span><i style="border-color:var(--amber)"></i>빈 자리(empty)</span>
+            <span><i style="border-color:var(--soildot);border-style:dashed"></i>보관 묘목</span>
+          </div>
+        </div>
+        <div class="cam" aria-label="비전 카메라 영상">
+          <div class="camhead"><span class="dot" id="camDot"></span>비전 카메라<span class="fps" id="camFps">꺼짐</span></div>
+          <div class="camview">
+            <img id="camImg" alt="비전 카메라 실시간 영상">
+            <p class="cammsg" id="camMsg">로봇에 연결하면 카메라 영상이 여기에 나와요.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" aria-label="작업">
+      <div class="tabs" role="tablist">
+        <button class="tab" role="tab" aria-selected="true" aria-controls="p1" id="t1">자동 식재 <small class="top">최우선</small></button>
+        <button class="tab" role="tab" aria-selected="false" aria-controls="p2" id="t2">음성 명령 <small>필수</small></button>
+      </div>
+
+      <div role="tabpanel" id="p1" aria-labelledby="t1">
+        <div class="row" style="align-items:flex-end;gap:12px">
+          <label class="field">심을 개수
+            <select id="plantCount">
+              <option value="0">남은 묘목 모두</option>
+              <option value="1">1그루</option><option value="2">2그루</option><option value="3">3그루</option>
+            </select>
+          </label>
+          <button class="btn" id="scanBtn">빈 자리 확인</button>
+          <button class="btn primary" id="plantBtn">식재 시작</button>
+        </div>
+        <ol class="steps" id="plantSteps">
+          <li data-s="wait"><b>빈 자리 확인</b><span>F·G·H·I 촬영</span></li>
+          <li data-s="wait"><b>자리 고르기</b><span>빈 자리 중 무작위</span></li>
+          <li data-s="wait"><b>묘목 옮기기</b><span>집어서 옮겨 심기</span></li>
+          <li data-s="wait"><b>결과 확인</b><span>다시 촬영해 검증</span></li>
+        </ol>
+        <p class="note">보관 중인 묘목 3개를 F·G·H·I 중 빈 자리(empty)에 무작위로 옮겨 심어요. 로봇이 내려놓으면 그 자리에 나무가 생겨요.</p>
+      </div>
+
+      <div role="tabpanel" id="p2" aria-labelledby="t2" hidden>
+        <div class="voicebar">
+          <button class="mic" id="micBtn" aria-label="음성으로 말하기">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+          </button>
+          <input id="voiceText" placeholder="명령을 말하거나 입력하세요" aria-label="명령 입력">
+          <button class="btn primary" id="sendBtn">보내기</button>
+        </div>
+        <div class="chips" id="chips">
+          <button class="chip">묘목 두 그루 심어줘</button>
+          <button class="chip">빈 자리 확인해줘</button>
+          <button class="chip">현재 상태 알려줘</button>
+          <button class="chip">홈 위치로 돌아가</button>
+          <button class="chip">잠깐 멈춰</button>
+        </div>
+        <div id="planBox"></div>
+        <div class="chat" id="chat" aria-live="polite"></div>
+        <p class="note">작업 명령은 반드시 “승인” 후에만 실행됩니다. “멈춰”는 승인 없이 바로 일시정지합니다. 로봇에 연결하면 마이크 버튼은 녹음 버튼이 되고, Whisper와 Claude가 해석합니다.</p>
+      </div>
+    </section>
+  </div>
+
+  <div class="col">
+    <section class="panel conn" aria-labelledby="connTitle">
+      <div class="row" style="justify-content:space-between;margin-bottom:10px">
+        <h2 id="connTitle" style="margin:0">로봇 연결</h2>
+        <span class="badge" id="modeBadge">시뮬레이션</span>
+      </div>
+      <div class="row">
+        <input id="rosUrl" value="ws://localhost:9090" aria-label="rosbridge 주소">
+        <button class="btn" id="connBtn">연결</button>
+      </div>
+      <details class="adv">
+        <summary>토픽 설정</summary>
+        <label>관절 토픽 (sensor_msgs/JointState)<input id="jointTopic" value="/dsr01/joint_states"></label>
+        <label>카메라 (CompressedImage 토픽 또는 http 영상 주소)<input id="camSrc" value="/camera/camera/color/image_raw/compressed"></label>
+        <div class="row" style="margin-top:8px"><button class="btn" id="applyTopics">적용</button><span class="muted">연결 중에 바꾸면 바로 다시 구독해요</span></div>
+      </details>
+    </section>
+
+    <section class="panel" aria-labelledby="armTitle">
+      <div class="row" style="justify-content:space-between;margin-bottom:10px">
+        <h2 id="armTitle" style="margin:0">로봇팔 상태</h2>
+        <span class="badge" id="jointBadge">미리보기</span>
+      </div>
+      <div class="joints" id="joints"></div>
+      <div class="tcp">
+        <div>X<b id="tx">0</b>mm</div>
+        <div>Y<b id="ty">0</b>mm</div>
+        <div>Z<b id="tz">0</b>mm</div>
+      </div>
+      <div class="speed">
+        <label for="speed">속도</label>
+        <input id="speed" type="range" min="10" max="100" step="10" value="60">
+        <b id="speedVal">60%</b>
+      </div>
+    </section>
+
+    <section class="panel" aria-labelledby="manTitle">
+      <h2 id="manTitle">수동 조작</h2>
+      <div class="ctrl">
+        <button class="btn" id="homeBtn">홈 위치로</button>
+        <button class="btn" id="pauseBtn">일시정지</button>
+        <button class="btn" id="gOpenBtn">그리퍼 열기</button>
+        <button class="btn" id="gCloseBtn">그리퍼 닫기</button>
+      </div>
+      <p class="note">그리퍼 <b id="gripState">열림</b>. 화면의 비상정지는 보조 수단이에요. 실제 로봇 옆 비상정지 버튼은 항상 손이 닿는 곳에 두세요.</p>
+    </section>
+
+    <section class="panel" aria-labelledby="logTitle">
+      <h2 id="logTitle">작업 기록</h2>
+      <ol class="log" id="log" aria-live="polite"></ol>
+    </section>
+  </div>
+</main>
+
+<script>
+/* ===== 설정: 팀 환경에 맞게 바꾸세요 ===== */
+const CONFIG = {
+  topics: {
+    command: { name: '/ui/command', type: 'std_msgs/String' },   // 화면 → 컨트롤러 (JSON 문자열)
+    status:  { name: '/ui/status',  type: 'std_msgs/String' }    // 컨트롤러 → 화면 (JSON 문자열)
+  },
+  // 실제 관절 값으로 지도 위 로봇팔을 그릴 때 쓰는 값 (두산 M0609 기준 근사값, 확실하지 않음)
+  arm: {
+    j1Sign: -1,        // J1을 +로 돌렸는데 지도에서 반대로 돌면 1로 바꾸기
+    j1OffsetDeg: 0,    // 지도 위쪽과 로봇 정면이 어긋나면 각도(도)로 보정
+    baseMm: 135,       // 바닥 → 2축 높이
+    upperMm: 411,      // 2축 → 3축 (윗팔)
+    foreMm: 368,       // 3축 → 손목 (아랫팔)
+    pxPerMm: 0.45      // 실제 mm → 지도 픽셀 비율
+  }
+};
+
+const $ = s => document.querySelector(s);
+const NS = 'http://www.w3.org/2000/svg';
+const BASE = { x: 230, y: 425 }, HOME = { x: 230, y: 250 };
+const L1 = 200, L2 = 180;
+const SPOT_IDS = ['F', 'G', 'H', 'I'];
+const SPOT_POS = { G: { x: 205, y: 135 }, H: { x: 340, y: 135 }, F: { x: 205, y: 255 }, I: { x: 340, y: 255 } };
+// 보관 묘목 C·D·E: 빈 자리 왼쪽에 나무로 그리고, 팔이 여기서 집어 감
+const SUPPLY_SPOT = { x: 92, y: 195 };
+const SUPPLY_POS = { C: SUPPLY_SPOT, D: SUPPLY_SPOT, E: SUPPLY_SPOT };
+const SUPPLY_IDS = ['C', 'D', 'E'];
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const initSpots = () => Object.fromEntries(SPOT_IDS.map(id => [id, { s: 'empty', conf: null }]));
+const S = {
+  mode: 'sim', busy: false, paused: false, estop: false, speed: 60,
+  grip: 'open', carry: false, tip: { ...HOME }, z: 300,
+  spots: initSpots(), scanned: false, supplyLeft: [...SUPPLY_IDS],
+  sweep: null, realJoints: null, realAt: 0, tcp: null, pendingPlan: null
+};
+
+/* ===== 기록 ===== */
+function log(text, level = 'info') {
+  const li = document.createElement('li');
+  li.className = level;
+  const d = new Date(), pad = n => String(n).padStart(2, '0');
+  li.innerHTML = `<time>${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}</time><span></span>`;
+  li.querySelector('span').textContent = text;
+  $('#log').prepend(li);
+}
+
+/* ===== 지도: 묘목 자리 (한 번 만들고 상태만 바꿈) ===== */
+const spotEls = {};
+function el(tag, attrs, parent) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+function buildSpots() {
+  const root = $('#spots');
+  SPOT_IDS.forEach(id => {
+    const { x, y } = SPOT_POS[id];
+    const g = el('g', {}, root);
+    el('circle', { class: 'hole', cx: x, cy: y, r: 42 }, g);
+    const idText = el('text', { class: 'spotid', x: x - 62, y: y + 5, 'text-anchor': 'middle' }, g);
+    idText.textContent = id;
+    const tree = el('g', { class: 'tree' }, g);
+    el('rect', { class: 'trunk', x: x - 4, y: y + 2, width: 8, height: 26, rx: 2 }, tree);
+    el('circle', { class: 'canopy', cx: x, cy: y - 6, r: 19 }, tree);
+    el('circle', { class: 'canopy2', cx: x - 13, cy: y + 4, r: 13 }, tree);
+    el('circle', { class: 'canopy2', cx: x + 13, cy: y + 4, r: 13 }, tree);
+    const box = el('rect', { class: 'box', x: x - 50, y: y - 50, width: 100, height: 100, rx: 6 }, g);
+    const tagbg = el('rect', { class: 'tagbg', x: x - 36, y: y - 66, width: 72, height: 19, rx: 5, opacity: 0 }, g);
+    const tag = el('text', { class: 'tag', x, y: y - 52, 'text-anchor': 'middle' }, g);
+    spotEls[id] = { tree, box, tag, tagbg };
+  });
+  // 보관 묘목 나무 한 그루: 팔이 여기서 집어 감 (마지막 묘목을 가져가면 사라짐)
+  const { x, y } = SUPPLY_SPOT;
+  el('rect', { class: 'tray', x: x - 38, y: y - 45, width: 76, height: 104, rx: 10 }, root);
+  el('text', { class: 'traylabel', x, y: y - 54, 'text-anchor': 'middle' }, root).textContent = '보관 묘목';
+  const t = el('g', { class: 'tree' }, root);
+  el('rect', { class: 'trunk', x: x - 4, y: y + 2, width: 8, height: 26, rx: 2 }, t);
+  el('circle', { class: 'canopy', cx: x, cy: y - 6, r: 19 }, t);
+  el('circle', { class: 'canopy2', cx: x - 13, cy: y + 4, r: 13 }, t);
+  el('circle', { class: 'canopy2', cx: x + 13, cy: y + 4, r: 13 }, t);
+  supplyEls.tree = t;
+  supplyEls.count = el('text', { class: 'supid', x, y: y + 48, 'text-anchor': 'middle' }, root);
+}
+const supplyEls = {};
+function updateSpots() {
+  SPOT_IDS.forEach(id => {
+    const sp = S.spots[id], e = spotEls[id];
+    e.tree.classList.toggle('show', sp.s === 'planted');
+    const show = S.scanned || sp.s === 'target';
+    const k = sp.s === 'planted' ? 'ok' : sp.s === 'target' ? 'target' : 'empty';
+    e.box.setAttribute('class', `box ${k}${show ? ' on' : ''}`);
+    e.tagbg.style.opacity = show ? '' : '0';
+    e.tag.setAttribute('class', `tag ${k === 'ok' ? 'ok' : 'empty'}`);
+    e.tag.textContent = !show ? '' : sp.s === 'planted' ? (sp.conf ? `묘목 ${sp.conf}%` : '묘목')
+      : sp.s === 'target' ? '심을 자리' : 'empty';
+  });
+  if (supplyEls.tree) {
+    const n = S.supplyLeft.length;
+    supplyEls.tree.classList.toggle('show', n > 0);
+    supplyEls.count.textContent = n ? `${n}그루` : '비었음';
+  }
+  $('#stPlanted').textContent = SPOT_IDS.filter(id => S.spots[id].s === 'planted').length;
+  $('#stSupply').textContent = S.supplyLeft.length;
+}
+
+/* ===== 지도: 로봇팔 (매 프레임) ===== */
+function ik(t) {
+  const dx = t.x - BASE.x, dy = t.y - BASE.y;
+  let d = Math.hypot(dx, dy);
+  d = Math.max(Math.abs(L1 - L2) + 1, Math.min(L1 + L2 - 1, d));
+  const a = Math.atan2(dy, dx);
+  const b = Math.acos((L1 * L1 + d * d - L2 * L2) / (2 * L1 * d));
+  const inner = Math.acos((L1 * L1 + L2 * L2 - d * d) / (2 * L1 * L2));
+  const e1 = { x: BASE.x + L1 * Math.cos(a + b), y: BASE.y + L1 * Math.sin(a + b) };
+  const e2 = { x: BASE.x + L1 * Math.cos(a - b), y: BASE.y + L1 * Math.sin(a - b) };
+  const up = e1.y <= e2.y;
+  return { a, b: up ? b : -b, inner, e: up ? e1 : e2, tip: { x: BASE.x + d * Math.cos(a), y: BASE.y + d * Math.sin(a) } };
+}
+const deg = r => r * 180 / Math.PI, rad = d => d * Math.PI / 180;
+function sprout(x, y, sc) {
+  return `<g transform="translate(${x},${y}) scale(${sc})"><rect class="trunk" x="-4" y="2" width="8" height="22" rx="2"/>
+    <circle class="canopy" cx="0" cy="-6" r="17"/><circle class="canopy2" cx="-12" cy="3" r="11"/><circle class="canopy2" cx="12" cy="3" r="11"/></g>`;
+}
+let rafPending = false;
+function render() { if (!rafPending) { rafPending = true; requestAnimationFrame(draw); } }
+function draw() {
+  rafPending = false;
+  let fx = '';
+  if (S.sweep) {
+    const x = 40 + 380 * S.sweep.p;
+    fx = `<rect class="sweepfill" x="40" y="40" width="${x - 40}" height="300"/><line class="sweep" x1="${x}" y1="40" x2="${x}" y2="340"/>`;
+  }
+  $('#fx').innerHTML = fx;
+  const k = ik(S.tip);
+  const zr = 8 + Math.max(0, S.z) / 22;
+  let s = `<circle class="base" cx="${BASE.x}" cy="${BASE.y}" r="36"/><circle class="basein" cx="${BASE.x}" cy="${BASE.y}" r="14"/>`;
+  s += `<line class="armlink" stroke-width="24" x1="${BASE.x}" y1="${BASE.y}" x2="${k.e.x}" y2="${k.e.y}"/>`;
+  s += `<line class="armlink" stroke-width="18" x1="${k.e.x}" y1="${k.e.y}" x2="${k.tip.x}" y2="${k.tip.y}"/>`;
+  s += `<circle class="armjoint" cx="${k.e.x}" cy="${k.e.y}" r="10"/>`;
+  s += `<circle class="zshadow" cx="${k.tip.x}" cy="${k.tip.y}" r="${zr}"/>`;
+  const ang = Math.atan2(k.tip.y - k.e.y, k.tip.x - k.e.x);
+  const open = S.grip === 'open' ? 11 : 5;
+  const px = -Math.sin(ang), py = Math.cos(ang), fx2 = Math.cos(ang), fy2 = Math.sin(ang);
+  [-1, 1].forEach(sg => {
+    const ox = k.tip.x + px * open * sg, oy = k.tip.y + py * open * sg;
+    s += `<line class="grip" x1="${ox}" y1="${oy}" x2="${ox + fx2 * 16}" y2="${oy + fy2 * 16}"/>`;
+  });
+  if (S.carry) s += sprout(k.tip.x + fx2 * 14, k.tip.y + fy2 * 14, 0.6);
+  $('#arm').innerHTML = s;
+  drawReadouts(k);
+}
+function drawReadouts(k) {
+  const live = S.realJoints && performance.now() - S.realAt < 2000;
+  let j;
+  if (live) j = S.realJoints;
+  else {
+    const j1 = deg(k.a) + 90;
+    j = [j1, 90 - Math.abs(deg(k.b)) - (S.z - 300) / 12, 180 - deg(k.inner), 0, 90 - (300 - S.z) / 6, -j1];
+  }
+  $('#joints').innerHTML = j.map((v, i) => {
+    const p = Math.max(-180, Math.min(180, v)) / 360 * 100;
+    return `<span>J${i + 1}</span><div class="bar"><i style="left:${p >= 0 ? 50 : 50 + p}%;width:${Math.abs(p)}%"></i></div><span class="jv">${v.toFixed(1)}°</span>`;
+  }).join('');
+  if (S.tcp && live) {
+    $('#tx').textContent = S.tcp.x.toFixed(0); $('#ty').textContent = S.tcp.y.toFixed(0); $('#tz').textContent = S.tcp.z.toFixed(0);
+  } else {
+    $('#tx').textContent = ((k.tip.x - BASE.x) / CONFIG.arm.pxPerMm).toFixed(0);
+    $('#ty').textContent = ((BASE.y - k.tip.y) / CONFIG.arm.pxPerMm).toFixed(0);
+    $('#tz').textContent = S.z.toFixed(0);
+  }
+  $('#gripState').textContent = S.grip === 'open' ? '열림' : '닫힘';
+}
+
+/* ===== 동작 (시뮬레이션) ===== */
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const ease = p => p < .5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+async function guard() {
+  if (S.estop) throw new Error('ESTOP');
+  while (S.paused) { await sleep(120); if (S.estop) throw new Error('ESTOP'); }
+}
+function tween(dur, fn) {
+  dur = reduce ? Math.min(dur, 150) : dur;
+  return new Promise((res, rej) => {
+    let t = 0, last = performance.now();
+    const f = now => {
+      if (S.estop) return rej(new Error('ESTOP'));
+      if (!S.paused) t += now - last;
+      last = now;
+      const p = Math.min(1, t / dur);
+      fn(ease(p)); render();
+      p < 1 ? requestAnimationFrame(f) : res();
+    };
+    requestAnimationFrame(f);
+  });
+}
+const pxPerSec = () => 90 + S.speed * 4.5;
+async function moveTo(x, y) {
+  await guard();
+  const f = { ...S.tip }, d = Math.hypot(x - f.x, y - f.y);
+  await tween(Math.max(250, d / pxPerSec() * 1000), p => { S.tip = { x: f.x + (x - f.x) * p, y: f.y + (y - f.y) * p }; });
+}
+async function moveZ(z) {
+  await guard();
+  const f = S.z;
+  await tween(Math.max(200, Math.abs(z - f) / pxPerSec() * 1000), p => { S.z = f + (z - f) * p; });
+}
+async function gripper(st) { await guard(); S.grip = st; render(); await sleep(reduce ? 50 : 300); }
+async function sweep() {
+  S.sweep = { p: 0 };
+  await tween(1200, p => { S.sweep.p = p; });
+  S.sweep = null; render();
+}
+
+function setState() {
+  let s = 'idle', t = '대기 중';
+  if (S.estop) { s = 'estop'; t = '비상정지'; }
+  else if (S.paused) { s = 'paused'; t = '일시정지'; }
+  else if (S.busy) { s = 'busy'; t = '작업 중: ' + S.busy; }
+  $('#state').dataset.s = s; $('#stateText').textContent = t;
+  const e = $('#estop');
+  e.textContent = S.estop ? '비상정지 해제' : '비상정지';
+  e.classList.toggle('reset', S.estop);
+  $('#pauseBtn').textContent = S.paused ? '재개' : '일시정지';
+  document.querySelectorAll('[data-task]').forEach(b => b.disabled = !!S.busy || S.estop);
+}
+async function runTask(name, fn) {
+  if (S.estop) { log('비상정지 상태입니다. 해제한 뒤 다시 시도하세요.', 'warn'); return; }
+  if (S.busy) { log(`“${S.busy}” 작업이 진행 중입니다. 끝난 뒤 다시 시도하세요.`, 'warn'); return; }
+  S.busy = name; setState();
+  try { await fn(); }
+  catch (e) {
+    if (e.message === 'ESTOP') { log(`비상정지로 “${name}” 작업이 중단되었습니다.`, 'danger'); S.carry = false; }
+    else log(e.message, 'danger');
+  }
+  finally {
+    SPOT_IDS.forEach(id => { if (S.spots[id].s === 'target') S.spots[id].s = 'empty'; });
+    S.busy = false; S.sweep = null; setState(); updateSpots(); render();
+  }
+}
+function steps(i, st) {
+  const li = $('#plantSteps').children;
+  if (i === 'reset') { [...li].forEach(l => l.dataset.s = 'wait'); return; }
+  if (li[i]) li[i].dataset.s = st;
+}
+const pct = (lo, hi) => Math.round(lo + Math.random() * (hi - lo));
+
+async function scan() {
+  steps(0, 'run');
+  await moveZ(300); await moveTo(HOME.x, HOME.y);
+  await sweep();
+  SPOT_IDS.forEach(id => { if (S.spots[id].s === 'planted') S.spots[id].conf = pct(92, 99); });
+  S.scanned = true; updateSpots();
+  const empty = SPOT_IDS.filter(id => S.spots[id].s === 'empty');
+  log(`빈 자리 확인 완료: empty ${empty.length}곳 (${empty.join(', ') || '없음'})`, 'ok');
+  steps(0, 'done');
+}
+async function plant(count) {
+  steps('reset');
+  await scan();
+  steps(1, 'run');
+  const empty = SPOT_IDS.filter(id => S.spots[id].s === 'empty');
+  if (!empty.length) { steps(1, 'fail'); throw new Error('빈 자리가 없습니다. 작업대를 초기화하세요.'); }
+  if (!S.supplyLeft.length) { steps(1, 'fail'); throw new Error('남은 묘목이 없습니다. 작업대를 초기화하세요.'); }
+  const n = Math.min(count || 99, empty.length, S.supplyLeft.length);
+  const targets = [...empty].sort(() => Math.random() - 0.5).slice(0, n);
+  targets.forEach(id => S.spots[id].s = 'target'); updateSpots();
+  log(`빈 자리 중 무작위로 ${targets.join(', ')}를 골랐습니다.`, 'ok');
+  steps(1, 'done');
+
+  steps(2, 'run');
+  for (const [i, id] of targets.entries()) {
+    const from = S.supplyLeft[0], sp = SUPPLY_POS[from], to = SPOT_POS[id];
+    await gripper('open');
+    await moveTo(sp.x, sp.y); await moveZ(60); await gripper('close');
+    S.supplyLeft.shift(); S.carry = true; updateSpots();
+    await moveZ(300); await moveTo(to.x, to.y); await moveZ(80);
+    await gripper('open'); S.carry = false;
+    S.spots[id] = { s: 'planted', conf: null }; updateSpots();
+    await moveZ(300);
+    log(`묘목 ${from} → ${id} 자리 식재 완료 (${i + 1}/${targets.length})`);
+  }
+  steps(2, 'done');
+
+  steps(3, 'run');
+  await moveTo(HOME.x, HOME.y); await sweep();
+  SPOT_IDS.forEach(id => { if (S.spots[id].s === 'planted') S.spots[id].conf = pct(93, 99); });
+  updateSpots();
+  log(`결과 확인 완료: ${SPOT_IDS.filter(id => S.spots[id].s === 'planted').length}/4자리에 묘목이 있습니다.`, 'ok');
+  steps(3, 'done');
+}
+
+/* ===== 음성 명령 ===== */
+const NUM = { '하나': 1, '한': 1, '둘': 2, '두': 2, '셋': 3, '세': 3, '석': 3 };
+function parseNum(t) {
+  const m = t.match(/(\d+)\s*(그루|개|자리)?/); if (m) return +m[1];
+  for (const k of ['하나', '둘', '셋', '한', '두', '세', '석'])
+    if (new RegExp(k + '\\s*(그루|개|자리)').test(t)) return NUM[k];
+  return 0;
+}
+function interpret(t) {
+  if (/멈춰|멈춤|정지|스톱|그만/.test(t)) return { kind: 'stop' };
+  if (/심어|식재|심기|옮겨/.test(t)) {
+    const n = Math.min(parseNum(t), 3);
+    return { kind: 'plant', count: n, summary: `묘목 ${n ? n + '그루' : '남은 것 모두'} 식재`, detail: '빈 자리 중에서 무작위로 골라 옮겨 심습니다.' };
+  }
+  if (/빈\s?자리|확인|스캔/.test(t)) return { kind: 'scan', summary: '빈 자리 확인', detail: '카메라로 F·G·H·I 자리를 촬영합니다.' };
+  if (/홈|원위치|제자리|돌아가/.test(t)) return { kind: 'home', summary: '홈 위치로 이동', detail: '로봇팔을 기본 자세로 돌려놓습니다.' };
+  if (/상태|어때|알려|진행/.test(t)) return { kind: 'status' };
+  return null;
+}
+function bubble(who, text) {
+  const d = document.createElement('div');
+  d.className = 'bubble ' + (who === 'me' ? 'me' : 'bot');
+  d.textContent = text; $('#chat').appendChild(d); $('#chat').scrollTop = 1e6;
+}
+function statusText() {
+  const planted = SPOT_IDS.filter(id => S.spots[id].s === 'planted');
+  const now = S.estop ? '비상정지 상태' : S.paused ? '일시정지 상태' : S.busy ? `“${S.busy}” 작업 중` : '대기 중';
+  return `로봇은 ${now}입니다. 묘목이 있는 자리는 ${planted.join(', ') || '없고'}${planted.length ? '이고' : ''}, 남은 묘목은 ${S.supplyLeft.length}개예요.`;
+}
+function handleCommand(text) {
+  text = text.trim(); if (!text) return;
+  bubble('me', text); $('#voiceText').value = '';
+  if (/멈춰|멈춤|정지|스톱|그만/.test(text)) { setPaused(true); bubble('bot', '일시정지했어요. 이어서 하려면 “재개”를 누르세요.'); return; }
+  if (S.mode === 'ros') { rosSend({ type: 'voice', text }); bubble('bot', '해석하고 있어요…'); return; }
+  const plan = interpret(text);
+  if (!plan) { bubble('bot', '명령을 이해하지 못했어요. 예: “묘목 두 그루 심어줘”, “현재 상태 알려줘”'); return; }
+  if (plan.kind === 'status') { bubble('bot', statusText()); return; }
+  showPlan(plan);
+}
+function showPlan(plan) {
+  S.pendingPlan = plan;
+  const box = $('#planBox');
+  box.innerHTML = `<div class="plan" role="alertdialog" aria-label="작업 승인"><h3></h3><p></p>
+    <div class="row"><button class="btn primary" id="approve">승인하고 실행</button><button class="btn" id="reject">취소</button></div></div>`;
+  box.querySelector('h3').textContent = `이렇게 이해했어요: ${plan.summary}`;
+  box.querySelector('p').textContent = `${plan.detail || ''} 실행할까요?`;
+  bubble('bot', `“${plan.summary}” 작업을 준비했어요. 승인하면 시작합니다.`);
+  $('#approve').onclick = () => approvePlan(true);
+  $('#reject').onclick = () => approvePlan(false);
+  $('#approve').focus();
+}
+function approvePlan(ok) {
+  const p = S.pendingPlan;
+  if (!p) return;
+  if (ok && !p.remote && (S.busy || S.estop)) {
+    bubble('bot', S.estop ? '비상정지 상태예요. 해제한 뒤 다시 승인해 주세요.' : `지금은 “${S.busy}” 작업 중이에요. 끝난 뒤 다시 승인을 눌러 주세요.`);
+    return;
+  }
+  S.pendingPlan = null; $('#planBox').innerHTML = '';
+  if (!ok) { if (p.remote) rosSend({ type: 'reject', plan_id: p.id }); bubble('bot', '취소했어요.'); log(`음성 명령 취소: ${p.summary}`, 'warn'); return; }
+  log(`음성 명령 승인: ${p.summary}`, 'ok');
+  if (p.remote) { rosSend({ type: 'approve', plan_id: p.id }); return; }
+  bubble('bot', '승인됐어요. 작업을 시작합니다.');
+  if (p.kind === 'plant') runTask('묘목 식재', () => plant(p.count));
+  if (p.kind === 'scan') runTask('빈 자리 확인', async () => { steps('reset'); await scan(); });
+  if (p.kind === 'home') goHome();
+}
+
+/* 녹음 (연결 모드) → 음성·LLM 노드 */
+let mediaRec = null, recTimer = null;
+const blobToB64 = blob => new Promise((res, rej) => {
+  const r = new FileReader();
+  r.onload = () => res(String(r.result).split(',')[1]);
+  r.onerror = () => rej(new Error('녹음 파일을 읽지 못했습니다'));
+  r.readAsDataURL(blob);
+});
+async function toggleRecord() {
+  if (mediaRec) { mediaRec.stop(); return; }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined')
+    return log('이 주소에서는 마이크를 쓸 수 없어요. http://localhost 주소로 열어 주세요.', 'warn');
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+  catch (e) { return log(micHelp(e.name), 'warn'); }
+  const chunks = [], rec = new MediaRecorder(stream);
+  mediaRec = rec;
+  rec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+  rec.onstop = async () => {
+    clearTimeout(recTimer); mediaRec = null;
+    stream.getTracks().forEach(t => t.stop());
+    $('#micBtn').classList.remove('on');
+    const blob = new Blob(chunks, { type: rec.mimeType || 'audio/webm' });
+    if (blob.size < 2000) return log('녹음이 너무 짧아요. 마이크를 누르고 말한 뒤 다시 누르세요.', 'warn');
+    try { rosSend({ type: 'voice_audio', mime: blob.type, data: await blobToB64(blob) }); bubble('bot', '들은 내용을 해석하고 있어요…'); }
+    catch (e) { log(e.message, 'danger'); }
+  };
+  rec.start();
+  $('#micBtn').classList.add('on');
+  log('녹음 중입니다. 다 말했으면 마이크 버튼을 다시 누르세요. (최대 15초)');
+  recTimer = setTimeout(() => { if (mediaRec) mediaRec.stop(); }, 15000);
+}
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+/* 마이크가 막혔을 때, 연 주소에 맞는 해결 방법을 알려줌 */
+function micHelp(err) {
+  const denied = err === 'not-allowed' || err === 'NotAllowedError' || err === 'service-not-allowed';
+  if (!denied) {
+    if (err === 'network') return '음성 인식 서버에 연결하지 못했어요(network). 우분투 Chromium이라면 Google Chrome으로 열거나, 로봇에 연결해 Whisper로 쓰세요.';
+    if (err === 'no-speech') return '말소리가 들리지 않았어요. 마이크 가까이에서 다시 말해 주세요.';
+    if (err === 'audio-capture' || err === 'NotFoundError') return '마이크 장치를 찾지 못했어요. 마이크 연결과 우분투 설정 → 사운드 → 입력을 확인하세요.';
+    return `마이크를 쓸 수 없어요(${err}). 글자로 입력해 주세요.`;
+  }
+  if (location.protocol === 'file:') return '마이크가 막혔어요. 파일을 더블클릭해 열면 마이크를 쓸 수 없어요. 터미널에서 python3 -m http.server 8000 실행 후 http://localhost:8000 주소로 열어 주세요.';
+  if (window.top !== window.self) return '마이크가 막혔어요. 게시된 링크에서는 마이크가 막힐 수 있어요. 파일을 내려받아 http://localhost 주소로 열어 주세요.';
+  return '마이크가 막혔어요. 주소창 왼쪽 아이콘 → 마이크 → 허용을 누른 뒤 새로고침하고, 우분투 설정 → 개인정보 → 마이크도 켜져 있는지 확인하세요.';
+}
+let rec = null;
+$('#micBtn').onclick = () => {
+  if (S.mode === 'ros') return toggleRecord();
+  if (!SR) { log('이 브라우저는 음성 인식을 지원하지 않아요. 크롬에서 열거나 글자로 입력하세요.', 'warn'); return; }
+  if (rec) { rec.stop(); return; }
+  rec = new SR(); rec.lang = 'ko-KR'; rec.interimResults = true;
+  $('#micBtn').classList.add('on');
+  rec.onresult = e => {
+    const r = e.results[e.results.length - 1];
+    $('#voiceText').value = r[0].transcript;
+    if (r.isFinal) handleCommand(r[0].transcript);
+  };
+  rec.onerror = e => log(micHelp(e.error), 'warn');
+  rec.onend = () => { rec = null; $('#micBtn').classList.remove('on'); };
+  rec.start();
+};
+$('#sendBtn').onclick = () => handleCommand($('#voiceText').value);
+$('#voiceText').onkeydown = e => { if (e.key === 'Enter' && !e.isComposing) handleCommand(e.target.value); };
+$('#chips').onclick = e => { if (e.target.matches('.chip')) handleCommand(e.target.textContent); };
+
+/* ===== 수동 조작·비상정지 ===== */
+const isRos = () => S.mode === 'ros';
+function remote(cmd, label) {
+  if (S.estop) return log('비상정지 상태입니다. 해제한 뒤 다시 시도하세요.', 'warn');
+  if (S.busy) return log(`“${S.busy}” 작업이 진행 중입니다. 끝난 뒤 다시 시도하세요.`, 'warn');
+  rosSend(cmd); log(`로봇에 “${label}” 명령을 보냈습니다.`);
+}
+function goHome() {
+  if (isRos()) return remote({ type: 'home' }, '홈 위치 이동');
+  runTask('홈 위치 이동', async () => { await gripper('open'); await moveZ(300); await moveTo(HOME.x, HOME.y); log('홈 위치에 도착했습니다.', 'ok'); });
+}
+function setPaused(v) {
+  if (S.estop) return;
+  S.paused = v; rosSend({ type: v ? 'pause' : 'resume' });
+  log(v ? '일시정지했습니다.' : '작업을 다시 시작합니다.', v ? 'warn' : 'ok'); setState();
+}
+function toggleEstop() {
+  if (!S.estop) { S.estop = true; S.paused = false; rosSend({ type: 'estop' }); log('비상정지! 모든 동작을 멈췄습니다.', 'danger'); }
+  else { S.estop = false; S.carry = false; rosSend({ type: 'estop_reset' }); log('비상정지를 해제했습니다. 주변 안전을 확인한 뒤 홈 위치로 이동하세요.', 'warn'); }
+  setState(); render();
+}
+$('#estop').onclick = toggleEstop;
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !S.estop) toggleEstop(); });
+$('#homeBtn').onclick = goHome;
+$('#pauseBtn').onclick = () => setPaused(!S.paused);
+function gripBtn(st) {
+  if (S.busy || S.estop) return log('작업 중이거나 비상정지 상태라 그리퍼를 움직일 수 없어요.', 'warn');
+  S.grip = st; rosSend({ type: 'gripper', state: st }); render(); log(st === 'open' ? '그리퍼 열림' : '그리퍼 닫힘');
+}
+$('#gOpenBtn').onclick = () => gripBtn('open');
+$('#gCloseBtn').onclick = () => gripBtn('close');
+$('#speed').oninput = e => { S.speed = +e.target.value; $('#speedVal').textContent = S.speed + '%'; };
+$('#speed').onchange = () => rosSend({ type: 'speed', percent: S.speed });
+
+['#scanBtn', '#plantBtn', '#homeBtn', '#resetBtn'].forEach(id => $(id).dataset.task = '1');
+$('#scanBtn').onclick = () => isRos() ? remote({ type: 'scan' }, '빈 자리 확인') : runTask('빈 자리 확인', async () => { steps('reset'); await scan(); });
+$('#plantBtn').onclick = () => isRos() ? remote({ type: 'plant', count: +$('#plantCount').value }, '묘목 식재') : runTask('묘목 식재', () => plant(+$('#plantCount').value));
+$('#resetBtn').onclick = () => {
+  if (S.busy) return;
+  if (isRos()) return remote({ type: 'reset_counts' }, '작업대 기록 초기화');
+  Object.assign(S, { spots: initSpots(), scanned: false, supplyLeft: [...SUPPLY_IDS], tip: { ...HOME }, z: 300, grip: 'open', carry: false });
+  steps('reset'); updateSpots(); render(); log('작업대를 처음 상태로 되돌렸습니다.');
+};
+
+/* ===== 탭 ===== */
+const tabs = [...document.querySelectorAll('[role="tab"]')];
+tabs.forEach((t, i) => {
+  t.onclick = () => tabs.forEach(o => { const on = o === t; o.setAttribute('aria-selected', on); $('#' + o.getAttribute('aria-controls')).hidden = !on; });
+  t.onkeydown = e => {
+    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+    const n = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length]; n.click(); n.focus();
+  };
+});
+
+/* ===== ROS 2 연결 (rosbridge) ===== */
+let ros = null, cmdTopic = null, jointSub = null, camSub = null, jointWatch = null;
+function rosSend(obj) {
+  if (S.mode !== 'ros' || !cmdTopic) return;
+  cmdTopic.publish(new ROSLIB.Message({ data: JSON.stringify(obj) }));
+}
+
+/* 컨트롤러가 보내는 자리 상태: 'empty' 외에는 묘목 있음으로 봄 */
+const normSpot = v => {
+  const s = String(v && typeof v === 'object' ? v.s || v.state : v).toLowerCase();
+  return s === 'empty' || s === 'false' || s === '0' || s === '' ? 'empty' : 'planted';
+};
+function setSpot(id, state, conf) {
+  id = String(id || '').toUpperCase();
+  if (!S.spots[id]) return;
+  S.spots[id] = { s: normSpot(state), conf: conf ?? null };
+}
+const SUPPLY_NAME = { C: 'C', D: 'D', E: 'E' };
+function applyScene(d) {
+  if (d.spots && typeof d.spots === 'object') {
+    for (const id of SPOT_IDS) if (id in d.spots) setSpot(id, d.spots[id], d.spots[id] && d.spots[id].conf);
+    S.scanned = true;
+  }
+  if (Array.isArray(d.supply)) S.supplyLeft = d.supply.filter(x => SUPPLY_NAME[x]);
+  else if (typeof d.supply === 'number') S.supplyLeft = SUPPLY_IDS.slice(SUPPLY_IDS.length - Math.max(0, Math.min(3, d.supply)));
+  updateSpots();
+}
+/* 실제 관절 값이 없을 때만 쓰는 위치 힌트 */
+let focusTok = 0;
+function focusArm(d) {
+  if (S.realJoints && performance.now() - S.realAt < 2000) return; // 실제 관절 값이 우선
+  const id = String(d.id ?? d.index ?? '').toUpperCase();
+  const pt = d.kind === 'home' ? HOME : d.kind === 'spot' ? SPOT_POS[id] : d.kind === 'supply' ? (SUPPLY_POS[id] || SUPPLY_POS.C) : null;
+  if (!pt) return;
+  const tok = ++focusTok, f = { ...S.tip };
+  tween(700, p => { if (tok === focusTok) S.tip = { x: f.x + (pt.x - f.x) * p, y: f.y + (pt.y - f.y) * p }; }).catch(() => {});
+}
+function onStatus(m) {
+  let d; try { d = JSON.parse(m.data); } catch { log(m.data); return; }
+  if (d.type === 'plan') showPlan({ remote: true, id: d.id, summary: d.summary, detail: d.detail });
+  else if (d.type === 'reply') bubble('bot', d.text);
+  else if (d.type === 'heard') bubble('me', `🎙 ${d.text}`);
+  else if (d.type === 'state') { S.busy = d.busy || false; setState(); }
+  else if (d.type === 'step') steps(d.index, d.state);
+  else if (d.type === 'scene') applyScene(d);
+  else if (d.type === 'spot') {
+    const id = String(d.id || '').toUpperCase(), before = S.spots[id] && S.spots[id].s;
+    setSpot(id, d.state, d.conf); S.scanned = true;
+    // 컨트롤러가 남은 묘목 수를 따로 안 보내도, 빈 자리에 새로 심어지면 하나 줄임
+    if (before === 'empty' && S.spots[id] && S.spots[id].s === 'planted' && d.supply === undefined) S.supplyLeft.shift();
+    if (Array.isArray(d.supply)) S.supplyLeft = d.supply.filter(x => SUPPLY_NAME[x]);
+    updateSpots();
+  }
+  else if (d.type === 'focus') focusArm(d);
+  else if (d.type === 'gripper') {
+    S.grip = d.state === 'close' ? 'close' : 'open'; S.carry = !!d.holding;
+    if (Array.isArray(d.supply)) { S.supplyLeft = d.supply.filter(x => SUPPLY_NAME[x]); updateSpots(); }
+    render();
+  }
+  else log(d.text || m.data, d.level || 'info');
+}
+
+/* 실제 관절 값 → 지도 위 로봇팔 */
+function onJoints(m) {
+  let pos = Array.from(m.position || []);
+  const names = m.name || [];
+  if (names.length === pos.length && names.length >= 6) {
+    const num = (n, i) => { const g = String(n).match(/(\d+)(?!.*\d)/); return g ? +g[1] : i + 1; };
+    pos = names.map((n, i) => ({ k: num(n, i), v: pos[i] })).sort((a, b) => a.k - b.k).map(p => p.v);
+  }
+  if (pos.length < 6) return;
+  const six = pos.slice(0, 6);
+  const isDeg = six.some(v => Math.abs(v) > 7); // 라디안이면 ±2π 안쪽
+  const j = six.map(v => isDeg ? v : deg(v));
+  const first = !S.realJoints;
+  S.realJoints = j; S.realAt = performance.now();
+  const A = CONFIG.arm;
+  const reach = A.upperMm * Math.sin(rad(j[1])) + A.foreMm * Math.sin(rad(j[1] + j[2]));
+  const height = A.baseMm + A.upperMm * Math.cos(rad(j[1])) + A.foreMm * Math.cos(rad(j[1] + j[2]));
+  const th = rad(-90 + A.j1Sign * j[0] + A.j1OffsetDeg);
+  focusTok++; // 진행 중인 위치 힌트 애니메이션 중단
+  S.tip = { x: BASE.x + reach * A.pxPerMm * Math.cos(th), y: BASE.y + reach * A.pxPerMm * Math.sin(th) };
+  S.z = height;
+  S.tcp = { x: reach * Math.cos(rad(j[0])), y: reach * Math.sin(rad(j[0])), z: height };
+  if (first) {
+    log(`실제 관절 값을 받기 시작했습니다 (${isDeg ? '도' : '라디안'} 단위로 인식). 지도 위 로봇팔이 실제 로봇을 따라 움직입니다.`, 'ok');
+    $('#jointBadge').textContent = '실제 로봇'; $('#jointBadge').className = 'badge live';
+  }
+  render();
+}
+function subscribeJoints() {
+  if (jointSub) { jointSub.unsubscribe(); jointSub = null; }
+  S.realJoints = null;
+  $('#jointBadge').textContent = '수신 대기'; $('#jointBadge').className = 'badge warn';
+  const name = $('#jointTopic').value.trim();
+  jointSub = new ROSLIB.Topic({ ros, name, messageType: 'sensor_msgs/JointState', throttle_rate: 50, queue_length: 1 });
+  jointSub.subscribe(onJoints);
+  clearTimeout(jointWatch);
+  jointWatch = setTimeout(() => {
+    if (S.mode === 'ros' && !S.realJoints)
+      log(`${name}에서 관절 값이 오지 않습니다. 터미널에서 “ros2 topic list | grep joint”로 이름을 확인해 토픽 설정에 넣어 주세요.`, 'warn');
+  }, 4000);
+}
+
+/* ===== 비전 카메라 ===== */
+let camFrames = 0, camLast = 0, camWatch = null;
+function camMsg(text) { $('#camMsg').textContent = text; $('#camMsg').hidden = !text; }
+function camLive(on) {
+  $('#camImg').classList.toggle('on', on); $('#camDot').classList.toggle('live', on);
+  if (!on) $('#camFps').textContent = '꺼짐';
+}
+function stopCamera() {
+  if (camSub) { camSub.unsubscribe(); camSub = null; }
+  clearTimeout(camWatch);
+  const img = $('#camImg'); img.onload = img.onerror = null; img.removeAttribute('src');
+  camLive(false);
+}
+function startCamera() {
+  stopCamera();
+  const src = $('#camSrc').value.trim();
+  if (!src) return camMsg('카메라 토픽이 비어 있어요. 토픽 설정에서 넣어 주세요.');
+  const img = $('#camImg');
+  if (/^https?:\/\//.test(src)) {          // web_video_server 같은 영상 주소
+    camMsg('영상 주소에 연결하는 중…');
+    img.onload = () => { camMsg(''); camLive(true); $('#camFps').textContent = '스트림'; };
+    img.onerror = () => { camLive(false); camMsg('영상 주소에 연결하지 못했어요. 주소와 web_video_server 실행을 확인하세요.'); };
+    img.src = src;
+    return;
+  }
+  if (S.mode !== 'ros') return camMsg('로봇에 연결하면 카메라 영상이 여기에 나와요.');
+  camMsg('카메라 영상을 기다리는 중…');
+  camFrames = 0; camLast = performance.now();
+  camSub = new ROSLIB.Topic({ ros, name: src, messageType: 'sensor_msgs/CompressedImage', throttle_rate: 66, queue_length: 1 });
+  camSub.subscribe(m => {
+    const fmt = /png/i.test(m.format || '') ? 'png' : 'jpeg';
+    img.src = `data:image/${fmt};base64,${m.data}`;
+    if (!camFrames) { camMsg(''); camLive(true); }
+    camFrames++;
+    const now = performance.now();
+    if (now - camLast > 1000) { $('#camFps').textContent = `${Math.round(camFrames * 1000 / (now - camLast))} fps`; camFrames = 1; camLast = now; }
+  });
+  camWatch = setTimeout(() => {
+    if (!$('#camImg').classList.contains('on'))
+      camMsg(`${src}에서 영상이 오지 않아요. 압축 영상 토픽(…/compressed)이 맞는지 “ros2 topic list | grep compressed”로 확인하세요.`);
+  }, 5000);
+}
+$('#applyTopics').onclick = () => {
+  if (S.mode === 'ros') { subscribeJoints(); log('관절 토픽을 다시 구독했습니다.'); }
+  startCamera();
+};
+
+function setMode(m) {
+  S.mode = m;
+  const b = $('#modeBadge');
+  b.textContent = m === 'ros' ? 'ROS 2 연결됨' : '시뮬레이션';
+  b.classList.toggle('ros', m === 'ros');
+  $('#connBtn').textContent = m === 'ros' ? '연결 끊기' : '연결';
+  if (m !== 'ros') {
+    S.realJoints = null; S.tcp = null; S.busy = false;
+    $('#jointBadge').textContent = '미리보기'; $('#jointBadge').className = 'badge';
+    if (jointSub) { jointSub.unsubscribe(); jointSub = null; }
+    if (!/^https?:/.test($('#camSrc').value.trim())) stopCamera();
+    camMsg('로봇에 연결하면 카메라 영상이 여기에 나와요.');
+    setState();
+  }
+  render();
+}
+$('#connBtn').onclick = () => {
+  if (S.mode === 'ros' && ros) { ros.close(); return; }
+  if (typeof ROSLIB === 'undefined') { log('ROS 연결 도구(roslib)를 불러오지 못했습니다. 인터넷 연결을 확인하세요.', 'danger'); return; }
+  const url = $('#rosUrl').value.trim();
+  log(`${url}에 연결을 시도합니다.`);
+  try { ros = new ROSLIB.Ros({ url }); }
+  catch (e) { log('주소 형식이 올바르지 않습니다. 예: ws://192.168.0.10:9090', 'danger'); return; }
+  ros.on('connection', () => {
+    setMode('ros');
+    log('ROS 2에 연결했습니다. 버튼은 로봇에 명령을 보내고, 지도는 실제 관절 값과 컨트롤러 상태로 바뀝니다.', 'ok');
+    const T = CONFIG.topics;
+    cmdTopic = new ROSLIB.Topic({ ros, name: T.command.name, messageType: T.command.type });
+    new ROSLIB.Topic({ ros, name: T.status.name, messageType: T.status.type }).subscribe(onStatus);
+    subscribeJoints();
+    startCamera();
+    setTimeout(() => rosSend({ type: 'hello' }), 500);
+  });
+  ros.on('error', () => log(`${url}에 연결하지 못했습니다. rosbridge가 켜져 있는지, 주소가 맞는지 확인하세요. 시뮬레이션으로 계속합니다.`, 'warn'));
+  ros.on('close', () => { if (S.mode === 'ros') log('ROS 2 연결이 끊겼습니다. 시뮬레이션으로 전환합니다.', 'warn'); cmdTopic = null; setMode('sim'); });
+};
+
+/* ===== 시작 ===== */
+buildSpots(); updateSpots(); render(); setState();
+log('관제 화면을 열었습니다. 시뮬레이션 모드로 시작합니다.');
+</script>
+</body>
+</html>
