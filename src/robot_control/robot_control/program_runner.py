@@ -1,0 +1,176 @@
+"""Creator3D / DRL 모양 코드(movej, movel, gripper ...)를 읽어 단계 목록으로 바꾸고,
+직선 경로 확인에 쓰는 회전 계산(ZYZ 오일러 ↔ 쿼터니언)을 모아 둔 모듈. ROS 없이도 테스트할 수 있어요."""
+import ast
+import math
+import re
+
+HOME_J = [0.0, 0.0, 90.0, 0.0, 90.0, 0.0]
+# gripper(퍼센트): 이 값 이상이면 '열기', 그보다 작으면 '닫기'.
+# Creator3D 는 물건을 잡을 때 물건 폭만큼만 닫는 값(예: gripper(66))을 적으므로, 다 연 것만 열기로 봐요.
+GRIP_OPEN_FROM = 95.0
+
+
+# ── 회전 계산 (두산 posx 의 Rx, Ry, Rz 는 ZYZ 오일러각) ─────────────────
+def zyz_to_quat(a, b, c):
+    a, b, c = (math.radians(v) for v in (a, b, c))
+    # Rz(a) · Ry(b) · Rz(c)
+    w = math.cos(b / 2) * math.cos((a + c) / 2)
+    x = -math.sin(b / 2) * math.sin((a - c) / 2)
+    y = math.sin(b / 2) * math.cos((a - c) / 2)
+    z = math.cos(b / 2) * math.sin((a + c) / 2)
+    return (w, x, y, z)
+
+
+def quat_to_zyz(q):
+    w, x, y, z = q
+    r13 = 2 * (x * z + w * y)
+    r23 = 2 * (y * z - w * x)
+    r33 = 1 - 2 * (x * x + y * y)
+    r31 = 2 * (x * z - w * y)
+    r32 = 2 * (y * z + w * x)
+    r11 = 1 - 2 * (y * y + z * z)
+    r21 = 2 * (x * y + w * z)
+    b = math.atan2(math.hypot(r13, r23), r33)
+    if math.sin(b) > 1e-6:
+        a = math.atan2(r23, r13)
+        c = math.atan2(r32, -r31)
+    else:  # b ≈ 0 또는 180: a, c 중 하나만 정해짐
+        a = math.atan2(r21, r11) if r33 > 0 else math.atan2(-r21, -r11)
+        c = 0.0
+    return tuple(math.degrees(v) for v in (a, b, c))
+
+
+def quat_angle(q1, q2):
+    """두 자세 사이의 회전 크기 (deg)"""
+    d = abs(sum(p * q for p, q in zip(q1, q2)))
+    return math.degrees(2 * math.acos(min(1.0, d)))
+
+
+def slerp(q1, q2, t):
+    d = sum(p * q for p, q in zip(q1, q2))
+    if d < 0:  # 짧은 쪽으로 돌기
+        q2 = tuple(-v for v in q2)
+        d = -d
+    if d > 0.9995:
+        q = tuple(p + (q - p) * t for p, q in zip(q1, q2))
+    else:
+        th = math.acos(d)
+        s1, s2 = math.sin((1 - t) * th) / math.sin(th), math.sin(t * th) / math.sin(th)
+        q = tuple(s1 * p + s2 * q for p, q in zip(q1, q2))
+    n = math.sqrt(sum(v * v for v in q))
+    return tuple(v / n for v in q)
+
+
+def line_points(start, target, step_mm=10.0, step_deg=2.0):
+    """movel 경로 위의 점들(끝점 포함). 위치는 직선, 자세는 최단 회전으로 나눔"""
+    q1, q2 = zyz_to_quat(*start[3:]), zyz_to_quat(*target[3:])
+    dist = math.dist(start[:3], target[:3])
+    rot = quat_angle(q1, q2)
+    n = max(1, math.ceil(max(dist / step_mm, rot / step_deg)))
+    pts = []
+    for k in range(1, n + 1):
+        t = k / n
+        p = [start[i] + (target[i] - start[i]) * t for i in range(3)]
+        pts.append((t, p + list(quat_to_zyz(slerp(q1, q2, t)))))
+    return pts, dist, rot
+
+
+# ── 코드 읽기 ────────────────────────────────────────────────────────
+def _num(node, env):
+    """숫자, vel 같은 변수, + - * / 만 허용하는 작은 계산기"""
+    if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+        return float(node.value)
+    if isinstance(node, ast.Name) and node.id in env:
+        return float(env[node.id])
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.USub, ast.UAdd)):
+        v = _num(node.operand, env)
+        return -v if isinstance(node.op, ast.USub) else v
+    if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Add, ast.Sub, ast.Mult, ast.Div)):
+        l, r = _num(node.left, env), _num(node.right, env)
+        return {ast.Add: l + r, ast.Sub: l - r, ast.Mult: l * r, ast.Div: l / r if r else 0.0}[type(node.op)]
+    if isinstance(node, ast.List) and len(node.elts) >= 1:  # vel=[30, 30] → 앞 값
+        return _num(node.elts[0], env)
+    raise ValueError("숫자로 읽을 수 없어요")
+
+
+def _pose(node, name, env):
+    if isinstance(node, ast.Call) and getattr(node.func, "id", "") == name:
+        args = node.args[0].elts if len(node.args) == 1 and isinstance(node.args[0], ast.List) else node.args
+        vals = [_num(a, env) for a in args]
+        if len(vals) != 6:
+            raise ValueError(f"{name} 에는 숫자 6개가 필요해요")
+        return vals
+    if isinstance(node, ast.List):
+        vals = [_num(a, env) for a in node.elts]
+        if len(vals) != 6:
+            raise ValueError("숫자 6개가 필요해요")
+        return vals
+    raise ValueError(f"{name}(...) 을 찾지 못했어요")
+
+
+def parse_program(text, default_vel=30.0, gripper=False):
+    """코드 → [{'kind': 'movej'|'movel'|'wait'|'grip'|'skip', ...,'line': n, 'src': '...'}]
+    gripper=True 면 gripper(퍼센트) 를 {'kind': 'grip', 'g': 퍼센트} 로 남김 (아니면 건너뜀).
+    문제가 있으면 ValueError('n번째 줄: ...')"""
+    env = {"vel": float(default_vel)}
+    steps = []
+    for n, raw in enumerate(text.splitlines(), 1):
+        src = raw.split("#", 1)[0].strip()
+        note = raw.split("#", 1)[1].strip() if "#" in raw else ""
+        if not src:
+            continue
+        try:
+            node = ast.parse(src, mode="exec").body
+        except SyntaxError:
+            raise ValueError(f"{n}번째 줄을 읽을 수 없어요: {src[:50]}")
+        if len(node) != 1:
+            raise ValueError(f"{n}번째 줄: 한 줄에 명령 하나만 써요")
+        st = node[0]
+        try:
+            if isinstance(st, ast.Assign) and len(st.targets) == 1 and isinstance(st.targets[0], ast.Name):
+                env[st.targets[0].id] = _num(st.value, env)
+                continue
+            if not (isinstance(st, ast.Expr) and isinstance(st.value, ast.Call)):
+                raise ValueError("이해할 수 없는 줄이에요")
+            call = st.value
+            fn = getattr(call.func, "id", "")
+            kw = {k.arg: k.value for k in call.keywords}
+            if fn in ("movej", "amovej"):
+                j = _pose(call.args[0], "posj", env)
+                v = _num(kw["vel"], env) if "vel" in kw else env["vel"]
+                a = _num(kw["acc"], env) if "acc" in kw else v * 2
+                steps.append({"kind": "movej", "pos": j, "vel": v, "acc": a})
+            elif fn in ("movel", "amovel"):
+                if "mod" in kw:
+                    raise ValueError("상대 이동(mod=...)은 지원하지 않아요")
+                x = _pose(call.args[0], "posx", env)
+                v = _num(kw["vel"], env) if "vel" in kw else 100.0
+                a = _num(kw["acc"], env) if "acc" in kw else v * 2
+                steps.append({"kind": "movel", "pos": x, "vel": v, "acc": a})
+            elif fn == "home":
+                steps.append({"kind": "movej", "pos": list(HOME_J), "vel": env["vel"], "acc": env["vel"] * 2})
+            elif fn in ("wait", "sleep"):
+                steps.append({"kind": "wait", "s": _num(call.args[0], env)})
+            elif fn == "gripper" and gripper:
+                steps.append({"kind": "grip", "g": max(0.0, min(100.0, _num(call.args[0], env)))})
+            elif fn in ("gripper", "tp_popup", "print", "say"):
+                steps.append({"kind": "skip", "why": "그리퍼 없음" if fn == "gripper" else "메시지"})
+            else:
+                raise ValueError(f"'{fn}' 명령은 지원하지 않아요")
+        except (ValueError, KeyError, IndexError) as e:
+            raise ValueError(f"{n}번째 줄: {e}  →  {src[:60]}")
+        steps[-1].update(line=n, src=src, note=note)
+    return steps
+
+
+def describe(step):
+    k = step["kind"]
+    if k == "movej":
+        return "movej " + ", ".join(f"{v:g}" for v in step["pos"])
+    if k == "movel":
+        return "movel " + ", ".join(f"{v:g}" for v in step["pos"])
+    if k == "wait":
+        return f"wait {step['s']:g}s"
+    if k == "grip":
+        return f"그리퍼 {'열기' if step['g'] >= GRIP_OPEN_FROM else '닫기'} (원본 {step['g']:g}%)"
+    return f"건너뜀 ({step['why']}): {step['src']}"

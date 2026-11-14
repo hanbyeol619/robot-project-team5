@@ -218,3 +218,15 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# ── Agriculture_Ws (ROS 2 colcon) ──
+build/
+install/
+log/
+src/build/
+src/install/
+src/log/
+.vscode/
+# 비밀 키 (OpenAI) — 절대 올리지 않음
+.env
+*.env

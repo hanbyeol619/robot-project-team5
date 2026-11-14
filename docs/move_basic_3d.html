@@ -1,0 +1,993 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+</head>
+<body>
+<title>move_basic 3D 해설</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@400;500;700&display=swap">
+<style>
+/* Layout: 왼쪽은 코드 순서대로 읽는 해설, 오른쪽은 고정된 3D 작업 셀. 휴대폰에서는 3D가 위에 고정된다. */
+:root{
+  --bg:#eef1f4; --surface:#ffffff; --stage:#e2e7ec; --ink:#16202a; --muted:#566370; --line:#d3d9df;
+  --accent:#c2600a; --accent-soft:rgba(194,96,10,.13); --p1:#2b67b0; --ok:#2c8a4c; --err:#c23b3b;
+  --code-bg:#f7f9fa; --kw:#7a3fb0; --str:#2c7a46; --com:#7d8895; --num:#b0530a;
+  --lbl-bg:rgba(255,255,255,.92);
+  --f-body:"IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --f-mono:"IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#10151a; --surface:#172029; --stage:#0b1015; --ink:#e5eaef; --muted:#97a4b1; --line:#283440;
+  --accent:#f08b2e; --accent-soft:rgba(240,139,46,.17); --p1:#6ea6e6; --ok:#53be78; --err:#ee6b6b;
+  --code-bg:#121a22; --kw:#c49cf0; --str:#7fcf98; --com:#76838f; --num:#f3a35c;
+  --lbl-bg:rgba(23,32,41,.92); color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#10151a; --surface:#172029; --stage:#0b1015; --ink:#e5eaef; --muted:#97a4b1; --line:#283440;
+  --accent:#f08b2e; --accent-soft:rgba(240,139,46,.17); --p1:#6ea6e6; --ok:#53be78; --err:#ee6b6b;
+  --code-bg:#121a22; --kw:#c49cf0; --str:#7fcf98; --com:#76838f; --num:#f3a35c;
+  --lbl-bg:rgba(23,32,41,.92); color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.72;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+code{font-family:var(--f-mono);font-size:.9em;background:var(--accent-soft);padding:.05em .35em;border-radius:4px}
+.top{max-width:1320px;margin:0 auto;padding-block:32px 12px}
+.eyebrow{font-family:var(--f-mono);font-size:12px;letter-spacing:.06em;color:var(--muted);text-transform:uppercase}
+h1{font-size:clamp(26px,4vw,38px);line-height:1.25;margin:.25em 0 .4em;text-wrap:balance;letter-spacing:-.01em}
+.lede{max-width:66ch;color:var(--muted);margin:0}
+.layout{max-width:1320px;margin:0 auto;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.18fr);gap:36px;align-items:start;padding-block:20px 80px}
+.story{display:flex;flex-direction:column;gap:64px;min-width:0}
+.chapter{min-width:0;scroll-margin-top:24px}
+.chapter .num{font-family:var(--f-mono);font-size:12px;letter-spacing:.06em;color:var(--muted);display:flex;gap:10px;align-items:center}
+.chapter .num b{font-weight:500;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:1px 9px}
+.chapter.active .num b{background:var(--accent);border-color:var(--accent);color:#fff}
+.chapter h2{font-size:22px;line-height:1.35;margin:.45em 0 .5em;text-wrap:balance}
+.chapter p{margin:.6em 0;max-width:66ch}
+.chapter ul{margin:.5em 0;padding-left:1.2em;max-width:64ch}
+.chapter li{margin:.25em 0}
+.code{background:var(--code-bg);border:1px solid var(--line);border-radius:10px;overflow-x:auto;font:13px/1.65 var(--f-mono);padding-block:10px;margin:14px 0}
+.ln{display:block;white-space:pre;padding:0 14px;min-width:max-content;transition:background .2s}
+.ln .no{display:inline-block;width:2.6em;color:var(--com);user-select:none}
+.ln.hl{background:var(--accent-soft);box-shadow:inset 3px 0 0 var(--accent)}
+.t-kw{color:var(--kw)} .t-str{color:var(--str)} .t-com{color:var(--com);font-style:italic} .t-num{color:var(--num)}
+.btn{font:500 13px/1 var(--f-body);color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:9px 12px;cursor:pointer;display:inline-flex;gap:6px;align-items:center}
+.btn:hover{border-color:var(--muted)}
+.btn:focus-visible,.seg button:focus-visible,input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface)}
+.seg button{font:500 13px/1 var(--f-body);color:var(--muted);background:transparent;border:0;padding:9px 12px;cursor:pointer}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--accent-soft);color:var(--ink)}
+.sliders{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px 20px;margin:14px 0;padding:14px;background:var(--surface);border:1px solid var(--line);border-radius:10px}
+.sliders label{display:flex;flex-direction:column;gap:2px;font-size:13px;min-width:0}
+.sliders .lab{display:flex;justify-content:space-between;gap:8px;font-family:var(--f-mono)}
+.sliders output{font-variant-numeric:tabular-nums;color:var(--accent);font-weight:500}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.note{font-size:13.5px;color:var(--muted)}
+.warn{font-size:13.5px;border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:10px 14px;max-width:66ch}
+.warn b{color:var(--err)}
+
+.stage{position:sticky;top:calc(env(safe-area-inset-top,0px) + 16px);height:calc(100vh - 32px - env(safe-area-inset-top,0px));min-height:460px;
+  display:flex;flex-direction:column;background:var(--stage);border:1px solid var(--line);border-radius:14px;overflow:hidden;min-width:0}
+.viewport{position:relative;flex:1;min-height:0;touch-action:none}
+.viewport canvas{display:block;position:absolute;inset:0}
+.labels{position:absolute;inset:0}
+.lbl{font:500 11.5px/1.35 var(--f-body);color:var(--ink);background:var(--lbl-bg);border:1px solid var(--line);border-radius:6px;padding:3px 8px;white-space:nowrap;pointer-events:none}
+.lbl code{background:none;padding:0;font-size:11px}
+.lbl small{display:block;color:var(--muted);font-size:10.5px}
+.lbl.acc{border-color:var(--accent)}
+.lbl.err{border-color:var(--err);color:var(--err)}
+.lbl.ok{border-color:var(--ok)}
+.lbl.plain{background:none;border:0}
+.timer{--p:0;width:46px;height:46px;border-radius:50%;background:conic-gradient(var(--accent) calc(var(--p)*1turn),var(--line) 0);display:grid;place-items:center;pointer-events:none}
+.timer span{width:36px;height:36px;border-radius:50%;background:var(--surface);display:grid;place-items:center;font:500 11px var(--f-mono);color:var(--ink)}
+.bar{width:110px;pointer-events:none;font:500 10.5px/1.3 var(--f-mono);color:var(--ink);background:var(--lbl-bg);border:1px solid var(--line);border-radius:6px;padding:4px 6px}
+.bar i{display:block;height:5px;margin-top:3px;border-radius:3px;background:linear-gradient(90deg,var(--accent) calc(var(--p,0)*100%),var(--line) 0)}
+.hud-console,.hud-graph,.nogl{z-index:2}
+.hud-console{position:absolute;left:10px;top:10px;max-width:min(330px,62%);margin:0;font:11.5px/1.55 var(--f-mono);color:var(--ink);background:var(--lbl-bg);border:1px solid var(--line);border-radius:8px;padding:7px 10px;white-space:pre-wrap;pointer-events:none}
+.hud-console::before{content:"터미널 출력";display:block;font-family:var(--f-body);font-size:10.5px;color:var(--muted);margin-bottom:2px}
+.hud-graph{position:absolute;right:10px;top:10px;width:240px;height:118px;background:var(--lbl-bg);border:1px solid var(--line);border-radius:8px;pointer-events:none}
+.hud-graph canvas{width:100%;height:100%;display:block}
+.caption{border-top:1px solid var(--line);background:var(--surface);padding:10px 14px;min-height:70px;font-size:14px;line-height:1.6}
+.caption .step{font-family:var(--f-mono);font-size:11.5px;color:var(--muted);margin-right:8px}
+.caption p{display:inline;margin:0}
+.controls{display:flex;flex-wrap:wrap;gap:8px;padding:10px 12px;border-top:1px solid var(--line);background:var(--surface);align-items:center}
+.controls .spacer{flex:1}
+.secnav{display:inline-flex;gap:4px}
+.secnav button{font:500 12px/1 var(--f-mono);width:28px;height:28px;border-radius:50%;border:1px solid var(--line);background:transparent;color:var(--muted);cursor:pointer}
+.secnav button[aria-current="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+.secnav button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.nogl{position:absolute;left:12px;right:12px;bottom:12px;margin:0;font-size:13px;color:var(--ink);background:var(--lbl-bg);border:1px solid var(--err);border-radius:8px;padding:8px 12px}
+.drag-hint{position:absolute;right:10px;bottom:8px;font-size:11px;color:var(--muted);pointer-events:none}
+
+@media (max-width:900px){
+  .layout{grid-template-columns:minmax(0,1fr);gap:22px}
+  .stage{order:-1;top:env(safe-area-inset-top,0px);height:56vh;min-height:360px;z-index:5;border-radius:12px}
+  .hud-graph{width:160px;height:84px}
+  .hud-console{font-size:10.5px;max-width:58%}
+  .caption{font-size:13px;min-height:62px;padding:8px 12px}
+  .controls{gap:6px;padding:8px}
+  .btn{padding:8px 10px}
+  .drag-hint{display:none}
+}
+@media (prefers-reduced-motion: reduce){ .ln{transition:none} }
+</style>
+
+<header class="top">
+  <div class="eyebrow">Agriculture_Ws / robot_control / move_basic.py</div>
+  <h1>move_basic.py를 3D로 따라가기</h1>
+  <p class="lede">두산 E0509 로봇팔을 움직이는 ROS 2 노드를 코드 순서대로 설명해요. 스크롤하면 3D 장면이 지금 읽는 부분으로 바뀌고, 실행 중인 코드 줄이 강조돼요. 장면은 마우스나 손가락으로 돌려 볼 수 있어요.</p>
+</header>
+
+<main class="layout">
+  <div class="story">
+
+    <section class="chapter" id="c1" data-sec="0">
+      <div class="num"><b>1</b> import · 1–4줄</div>
+      <h2>프로그램이 쓸 도구 가져오기</h2>
+      <p>파일 맨 위에서 네 가지 도구를 불러와요. 3D 장면에서는 import 줄이 하나씩 실행될 때마다 도구 블록이 파일로 들어와요.</p>
+      <div class="code" data-from="1" data-to="4"></div>
+      <ul>
+        <li><code>time</code> 파이썬 기본 모듈이에요. 그리퍼가 움직이는 동안 <code>time.sleep()</code>으로 기다릴 때 써요.</li>
+        <li><code>rclpy</code> ROS 2를 파이썬에서 쓰게 해 주는 라이브러리예요. 노드를 만들고 서비스를 호출할 때 필요해요.</li>
+        <li><code>DR_init</code> 두산 라이브러리의 설정 저장소예요. 로봇 ID, 모델, 노드를 넣어 두면 나중에 <code>DSR_ROBOT2</code>가 꺼내 써요.</li>
+        <li><code>Trigger</code> ROS 2 기본 서비스 타입이에요. 요청은 비어 있고, 응답으로 <code>success</code>와 <code>message</code>가 와요.</li>
+      </ul>
+      <div class="row"><button class="btn primary" data-play="0">▶ 이 장면 재생</button></div>
+    </section>
+
+    <section class="chapter" id="c2" data-sec="1">
+      <div class="num"><b>2</b> 로봇 설정 · 6–9줄</div>
+      <h2>어떤 로봇에게 명령할지 정하기</h2>
+      <p><code>ROBOT_ID</code>와 <code>ROBOT_MODEL</code>을 <code>DR_init</code>의 서랍에 넣어요. 3D 장면에서는 카드 두 장이 서랍 <code>id</code>, <code>model</code>에 들어가요.</p>
+      <div class="code" data-from="6" data-to="9"></div>
+      <ul>
+        <li><code>dsr01</code> 두산 드라이버를 켤 때 쓰는 기본 이름이에요. 드라이버의 토픽과 서비스가 <code>/dsr01/...</code> 아래에 만들어져요.</li>
+        <li><code>e0509</code> 로봇 모델명이에요. 모델마다 관절 한계 같은 값이 달라서 정확히 적어야 해요.</li>
+      </ul>
+      <p class="note">장면 속 토픽·서비스 이름 가운데 (예시)라고 적힌 것은 드라이버가 만드는 이름의 예시예요. 실제 목록은 <code>ros2 service list</code>로 확인하세요.</p>
+      <div class="row"><button class="btn primary" data-play="1">▶ 이 장면 재생</button></div>
+    </section>
+
+    <section class="chapter" id="c3" data-sec="2">
+      <div class="num"><b>3</b> 조절할 값 · 11–16줄</div>
+      <h2>왕복 거리와 속도 정하기</h2>
+      <p>동작을 바꾸고 싶을 때 보통 이 여섯 값만 고치면 돼요. 아래 슬라이더를 움직이면 3D 장면의 P2 위치가 바로 바뀌고, 재생하면 그 속도로 움직여요. 여기서 바꾼 값은 5번, 6번 장면에도 그대로 쓰여요.</p>
+      <div class="code" data-from="11" data-to="16"></div>
+      <div class="sliders">
+        <label for="sREPEAT"><span class="lab">REPEAT <output id="oREPEAT">3</output></span><input id="sREPEAT" type="range" min="1" max="5" step="1" value="3"></label>
+        <label for="sOFFSET_X"><span class="lab">OFFSET_X <output id="oOFFSET_X">50 mm</output></span><input id="sOFFSET_X" type="range" min="-150" max="150" step="10" value="50"></label>
+        <label for="sOFFSET_Y"><span class="lab">OFFSET_Y <output id="oOFFSET_Y">100 mm</output></span><input id="sOFFSET_Y" type="range" min="-150" max="150" step="10" value="100"></label>
+        <label for="sVEL"><span class="lab">VEL[0] <output id="oVEL">100 mm/s</output></span><input id="sVEL" type="range" min="20" max="250" step="10" value="100"></label>
+        <label for="sACC"><span class="lab">ACC[0] <output id="oACC">100 mm/s²</output></span><input id="sACC" type="range" min="20" max="250" step="10" value="100"></label>
+        <label for="sGRIP_WAIT"><span class="lab">GRIP_WAIT <output id="oGRIP_WAIT">1.0 s</output></span><input id="sGRIP_WAIT" type="range" min="0" max="3" step="0.5" value="1"></label>
+      </div>
+      <div class="row"><button class="btn primary" data-play="2">▶ 이 장면 재생</button><button class="btn" id="resetParams">코드 기본값으로 되돌리기</button></div>
+      <p class="note">VEL과 ACC의 두 번째 값(deg/s, deg/s²)은 회전 속도예요. 이 코드는 자세를 바꾸지 않으니까 직선 속도인 첫 번째 값만 움직임에 영향을 줘요. 처음 실제 로봇에서 돌릴 때는 속도를 낮게 두세요.</p>
+    </section>
+
+    <section class="chapter" id="c4" data-sec="3">
+      <div class="num"><b>4</b> call_gripper · 19–32줄</div>
+      <h2>그리퍼 서비스를 부르는 함수</h2>
+      <p>그리퍼에게 “닫아”, “열어”를 보내는 함수예요. 서비스를 찾고(최대 3초), 요청을 보내고, 응답을 기다리고(최대 5초), 결과를 확인한 뒤 <code>GRIP_WAIT</code>만큼 기다려요.</p>
+      <div class="code" data-from="19" data-to="32"></div>
+      <ul>
+        <li><code>call_async</code>는 응답을 기다리지 않고 바로 <code>future</code>를 돌려줘요. future는 “나중에 결과가 들어올 상자”예요.</li>
+        <li><code>spin_until_future_complete</code>가 노드를 돌려야(spin) 응답 메시지가 실제로 처리돼요.</li>
+        <li>서비스는 명령을 받자마자 응답할 수 있지만 집게가 다 움직이려면 시간이 걸려서, 마지막에 <code>time.sleep</code>으로 기다려요.</li>
+      </ul>
+      <p>아래에서 상황을 골라 보세요. 실패하면 어떤 에러가 언제 나오는지 볼 수 있어요.</p>
+      <div class="row">
+        <div class="seg" role="group" aria-label="그리퍼 서비스 상황">
+          <button type="button" data-scn="ok" aria-pressed="true">정상</button>
+          <button type="button" data-scn="nosrv" aria-pressed="false">서비스 없음</button>
+          <button type="button" data-scn="noresp" aria-pressed="false">응답 없음</button>
+        </div>
+        <button class="btn primary" data-play="3">▶ 이 장면 재생</button>
+      </div>
+      <p class="note">이 코드는 서비스를 호출만 해요. <code>/dsr01/gripper/open</code>, <code>/dsr01/gripper/close</code>를 제공하는 노드는 따로 실행해야 해요.</p>
+    </section>
+
+    <section class="chapter" id="c5" data-sec="4">
+      <div class="num"><b>5</b> main · 35–71줄</div>
+      <h2>로봇을 실제로 움직이는 main 함수</h2>
+      <p>노드를 만들고, 두산 함수를 가져오고, 자동 모드로 바꾼 뒤 지금 위치를 P1로, 옆 점을 P2로 정해요. 그다음 <code>movel</code>로 P1↔P2를 <code>REPEAT</code>번 왕복하고, 그리퍼를 닫았다가 열어요.</p>
+      <div class="code" data-from="35" data-to="71"></div>
+      <ul>
+        <li><code>DSR_ROBOT2</code>는 import되는 순간 <code>DR_init.__dsr__node</code>를 가져다 써요. 그래서 노드를 만든 <b>뒤에</b> main 안에서 import해요.</li>
+        <li><code>movel</code>은 끝단을 <b>직선</b>으로 움직이고, 도착해야 다음 줄로 넘어가요. 3D에서 끝단이 남기는 선과 속도 그래프로 확인할 수 있어요.</li>
+        <li>장면 아래의 <b>Ctrl+C</b> 버튼은 try 블록이 실행되는 동안 눌러 볼 수 있어요. except와 finally가 어떻게 동작하는지 보여 줘요.</li>
+      </ul>
+      <p class="note">3D 장면의 시작 위치 [400, 0, 400, 0, 180, 0]은 예시 값이에요. 실제로는 로봇이 서 있는 위치에서 시작해요. 받침대 위 큐브도 잡기 동작을 보여 주려고 놓은 예시예요.</p>
+      <div class="row"><button class="btn primary" data-play="4">▶ 이 장면 재생</button></div>
+    </section>
+
+    <section class="chapter" id="c6" data-sec="5">
+      <div class="num"><b>6</b> 실행 진입점 · 74–75줄</div>
+      <h2>프로그램이 main()에 들어가는 두 가지 길</h2>
+      <p><code>python3 move_basic.py</code>로 파일을 직접 실행하면 <code>__name__</code>이 <code>"__main__"</code>이 되어 74–75줄이 <code>main()</code>을 불러요. <code>ros2 run robot_control move_basic</code>으로 실행하면 <code>setup.py</code>의 entry point(<code>move_basic = robot_control.move_basic:main</code>)가 <code>main</code>을 바로 불러서, 이 두 줄은 쓰이지 않아요.</p>
+      <div class="code" data-from="74" data-to="75"></div>
+      <div class="row">
+        <div class="seg" role="group" aria-label="실행 방법">
+          <button type="button" data-route="ros2" aria-pressed="true">ros2 run으로 실행</button>
+          <button type="button" data-route="py" aria-pressed="false">python3로 실행</button>
+        </div>
+        <button class="btn primary" data-play="5">▶ 이 장면 재생</button>
+      </div>
+      <p class="warn"><b>실제 로봇에서 실행하기 전에</b> 두산 드라이버(bringup)가 켜져 있고 주변에 사람이나 물건이 없는지 확인하세요. 프로그램을 멈춰도 컨트롤러가 이미 받은 이동은 끝까지 진행될 수 있으니, 급할 때는 티치 펜던트의 비상 정지를 쓰세요.</p>
+    </section>
+
+  </div>
+
+  <aside class="stage" aria-label="3D 장면">
+    <div class="viewport" id="viewport">
+      <pre class="hud-console" id="console" hidden></pre>
+      <div class="hud-graph" id="graphBox" hidden><canvas id="graph"></canvas></div>
+      <div class="drag-hint">드래그: 회전 · 휠: 확대</div>
+    </div>
+    <div class="caption" aria-live="polite"><span class="step" id="capStep">1-1</span><p id="capText">3D 장면을 불러오는 중이에요.</p></div>
+    <div class="controls">
+      <button class="btn" id="bRestart" title="처음부터">↺ 처음부터</button>
+      <button class="btn primary" id="bPlay">▶ 재생</button>
+      <button class="btn" id="bStep" title="다음 단계로">한 단계 ›</button>
+      <div class="seg" role="group" aria-label="재생 속도">
+        <button type="button" data-speed="0.5" aria-pressed="false">0.5x</button>
+        <button type="button" data-speed="1" aria-pressed="true">1x</button>
+        <button type="button" data-speed="2" aria-pressed="false">2x</button>
+      </div>
+      <button class="btn" id="bCtrlC" hidden disabled>Ctrl+C</button>
+      <span class="spacer"></span>
+      <nav class="secnav" aria-label="장면 이동">
+        <button data-nav="0" aria-current="true">1</button><button data-nav="1">2</button><button data-nav="2">3</button><button data-nav="3">4</button><button data-nav="4">5</button><button data-nav="5">6</button>
+      </nav>
+    </div>
+  </aside>
+</main>
+
+<script>
+  // 스크립트가 멈추면 이유를 장면 아래 자막에 보여 준다
+  window.__showErr = function(msg){
+    var c = document.getElementById('capText'); if(!c) return;
+    c.textContent = '3D 장면을 실행하지 못했어요: ' + msg;
+  };
+  window.addEventListener('error', function(e){ window.__showErr(e.message || '스크립트를 불러오지 못했어요'); }, true);
+  window.addEventListener('unhandledrejection', function(e){ window.__showErr(String(e.reason && e.reason.message || e.reason)); });
+  setTimeout(function(){ if(!window.__mb3dReady) window.__showErr('스크립트가 시작되지 않았어요 (Three.js를 불러오지 못했을 수 있어요).'); }, 8000);
+</script>
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/+esm';
+import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js/+esm';
+import { CSS2DRenderer, CSS2DObject } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/renderers/CSS2DRenderer.js/+esm';
+window.__mb3dReady = true;
+
+/* ---------- 원본 코드 (move_basic.py) ---------- */
+const SRC = `import time
+import rclpy
+import DR_init
+from std_srvs.srv import Trigger
+
+ROBOT_ID = "dsr01"
+ROBOT_MODEL = "e0509"
+DR_init.__dsr__id = ROBOT_ID
+DR_init.__dsr__model = ROBOT_MODEL
+
+REPEAT = 3          # 왕복 횟수
+OFFSET_X = 50.0
+OFFSET_Y = 100.0    # mm, 두 번째 점까지 거리
+VEL = [100.0, 100.0]  # [mm/s, deg/s] 처음엔 낮게
+ACC = [100.0, 60.0]
+GRIP_WAIT = 1.0     # 그리퍼 동작 후 대기 시간 (초)
+
+
+def call_gripper(node, client, name):
+    """그리퍼 서비스 호출 (open / close)"""
+    if not client.wait_for_service(timeout_sec=3.0):
+        node.get_logger().error(f"gripper/{name} 서비스를 찾을 수 없음")
+        return False
+    future = client.call_async(Trigger.Request())
+    rclpy.spin_until_future_complete(node, future, timeout_sec=5.0)
+    res = future.result()
+    if res is None:
+        node.get_logger().error(f"gripper/{name} 응답 없음")
+        return False
+    print(f"그리퍼 {name}: success={res.success}, msg='{res.message}'")
+    time.sleep(GRIP_WAIT)
+    return res.success
+
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = rclpy.create_node("move_basic", namespace=ROBOT_ID)
+    DR_init.__dsr__node = node
+
+    from DSR_ROBOT2 import movel, posx, get_current_posx
+    from DSR_ROBOT2 import set_robot_mode, ROBOT_MODE_AUTONOMOUS, DR_BASE
+
+    # 그리퍼 서비스 클라이언트 (네임스페이스 dsr01 기준 → /dsr01/gripper/...)
+    grip_open = node.create_client(Trigger, "gripper/open")
+    grip_close = node.create_client(Trigger, "gripper/close")
+
+    set_robot_mode(ROBOT_MODE_AUTONOMOUS)
+
+    cur = get_current_posx()[0]        # [x, y, z, rx, ry, rz]
+    print(f"현재 위치: {cur}")
+
+    p1 = posx(*cur)
+    p2 = posx(cur[0] + OFFSET_X, cur[1] + OFFSET_Y, cur[2], cur[3], cur[4], cur[5])
+
+    try:
+        for i in range(REPEAT):
+            print(f"[{i+1}/{REPEAT}] → P2")
+            movel(p2, vel=VEL, acc=ACC, ref=DR_BASE)
+            print(f"[{i+1}/{REPEAT}] → P1")
+            movel(p1, vel=VEL, acc=ACC, ref=DR_BASE)
+
+        # 마지막에 잡고 → 열기
+        print("그리퍼 닫기 (잡기)")
+        call_gripper(node, grip_close, "close")
+        print("그리퍼 열기")
+        call_gripper(node, grip_open, "open")
+
+    except KeyboardInterrupt:
+        print("중단")
+    finally:
+        rclpy.shutdown()
+
+
+if __name__ == "__main__":
+    main()`.split('\n');
+
+const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const TOK = /("""[^]*?"""|f?"[^"]*"|f?'[^']*')|(#.*$)|\b(import|from|def|return|if|not|for|in|try|except|finally|None|True|False)\b|\b(\d+(?:\.\d+)?)\b/g;
+function hlPy(line){
+  let out='', last=0, m; TOK.lastIndex=0;
+  while((m=TOK.exec(line))){
+    out+=esc(line.slice(last,m.index));
+    const cls = m[1]?'t-str':m[2]?'t-com':m[3]?'t-kw':'t-num';
+    out+=`<span class="${cls}">${esc(m[0])}</span>`; last=TOK.lastIndex;
+  }
+  return out+esc(line.slice(last));
+}
+document.querySelectorAll('.code').forEach(box=>{
+  const a=+box.dataset.from, b=+box.dataset.to; let h='';
+  for(let n=a;n<=b;n++) h+=`<span class="ln" data-line="${n}"><span class="no">${n}</span>${hlPy(SRC[n-1])||' '}</span>`;
+  box.innerHTML=h;
+});
+
+/* ---------- 공용 도우미 ---------- */
+const $ = s => document.querySelector(s);
+const clamp=(v,a=0,b=1)=>Math.min(b,Math.max(a,v));
+const lerp=(a,b,t)=>a+(b-a)*t;
+const seg=(p,a,b)=>clamp((p-a)/(b-a));
+const ease=t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;
+const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
+// ROS/두산 좌표(mm, Z가 위) → Three.js 좌표(m, Y가 위)
+const R=(x,y,z)=>new THREE.Vector3(x/1000, z/1000, -y/1000);
+const V=(x,y,z)=>new THREE.Vector3(x,y,z);
+const fmt=(n,d=1)=>Number(n).toFixed(d);
+
+const P = { REPEAT:3, OFFSET_X:50, OFFSET_Y:100, VEL:100, ACC:100, GRIP_WAIT:1 };
+const DEF = {...P};
+const HOME=[400,0,400];
+const p2of=()=>[HOME[0]+P.OFFSET_X, HOME[1]+P.OFFSET_Y, HOME[2]];
+
+/* ---------- 렌더러와 장면 ---------- */
+const vp=$('#viewport');
+let renderer;
+try{ renderer=new THREE.WebGLRenderer({antialias:true, alpha:true}); }
+catch(e){
+  const n=document.createElement('p'); n.className='nogl';
+  n.textContent='이 브라우저에서는 3D(WebGL)를 켤 수 없어서 이름표와 설명만 보여요. 하드웨어 가속을 켜거나 다른 브라우저(Chrome, Edge, Safari 최신 버전)에서 열어 보세요.';
+  vp.appendChild(n);
+  renderer={ domElement:document.createElement('canvas'), shadowMap:{}, setPixelRatio(){}, setSize(){}, render(){} };
+}
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+vp.prepend(renderer.domElement);
+const lr=new CSS2DRenderer(); lr.domElement.className='labels'; vp.insertBefore(lr.domElement, $('#console'));
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(38,1,0.05,50);
+camera.position.set(-1.3,1.35,2.0);
+const controls=new OrbitControls(camera, lr.domElement);
+controls.enableDamping=true; controls.minDistance=.6; controls.maxDistance=6; controls.maxPolarAngle=Math.PI*.495;
+controls.target.set(-.3,.6,.2);
+
+scene.add(new THREE.HemisphereLight(0xffffff,0x8693a0,1.25));
+const sun=new THREE.DirectionalLight(0xffffff,1.7); sun.position.set(1.4,3,2.2); sun.castShadow=true;
+sun.shadow.mapSize.set(1024,1024); Object.assign(sun.shadow.camera,{left:-1.6,right:1.6,top:1.6,bottom:-1.6,near:.5,far:8});
+scene.add(sun);
+const floor=new THREE.Mesh(new THREE.PlaneGeometry(8,8), new THREE.ShadowMaterial({opacity:.16}));
+floor.rotation.x=-Math.PI/2; floor.receiveShadow=true; scene.add(floor);
+let grid=null;
+function css(name){ return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+function applyTheme(){
+  if(grid){ scene.remove(grid); grid.geometry.dispose(); }
+  grid=new THREE.GridHelper(3,30, new THREE.Color(css('--muted')), new THREE.Color(css('--line')));
+  grid.material.transparent=true; grid.material.opacity=.7; scene.add(grid);
+  drawGraph();
+}
+
+const M=(c,o={})=>new THREE.MeshStandardMaterial({color:c,roughness:.5,metalness:.05,...o});
+const ACC_C=0xd4710f, P1_C=0x2f6fbf, OK_C=0x2f9a55, ERR_C=0xc94040;
+
+/* ---------- 라벨 ---------- */
+const labels=[];
+function label(html,cls='',center=[.5,1]){
+  const d=document.createElement('div'); d.className='lbl '+cls; d.innerHTML=html;
+  const o=new CSS2DObject(d); o.center.set(center[0],center[1]); o.userData.show=true; labels.push(o); return o;
+}
+function rawLabel(el,center=[.5,.5]){ const o=new CSS2DObject(el); o.center.set(...center); o.userData.show=true; labels.push(o); return o; }
+const show=(o,v)=>{ o.userData.show=!!v; };
+function syncLabels(){
+  for(const o of labels){
+    let vis=o.userData.show, p=o.parent;
+    while(vis&&p){ if(!p.visible) vis=false; p=p.parent; }
+    if(!p && vis && o.parent==null) vis=false;
+    o.visible=vis; if(!vis) o.element.style.display='none';
+  }
+}
+function line(points,color,dashed=false,opacity=1){
+  const g=new THREE.BufferGeometry().setFromPoints(points);
+  const m=dashed?new THREE.LineDashedMaterial({color,dashSize:.025,gapSize:.018,transparent:true,opacity}):new THREE.LineBasicMaterial({color,transparent:true,opacity});
+  const l=new THREE.Line(g,m); if(dashed) l.computeLineDistances(); l.frustumCulled=false; return l;
+}
+function setLine(l,a,b){ const p=l.geometry.attributes.position; p.setXYZ(0,a.x,a.y,a.z); p.setXYZ(1,b.x,b.y,b.z); p.needsUpdate=true; if(l.material.isLineDashedMaterial) l.computeLineDistances(); l.geometry.computeBoundingSphere(); }
+function bez(a,c,b,t){ const u=1-t; return new THREE.Vector3().addScaledVector(a,u*u).addScaledVector(c,2*u*t).addScaledVector(b,t*t); }
+function timerEl(){ const d=document.createElement('div'); d.className='timer'; d.innerHTML='<span>0.0s</span>'; return d; }
+function setTimer(el,elapsed,total){ el.style.setProperty('--p',clamp(elapsed/total)); el.firstChild.textContent=fmt(Math.max(0,total-elapsed))+'s'; }
+function barEl(text){ const d=document.createElement('div'); d.className='bar'; d.innerHTML=`<span>${text}</span><i></i>`; return d; }
+function setBar(el,p,text){ el.style.setProperty('--p',clamp(p)); if(text) el.firstChild.textContent=text; }
+
+/* ---------- 로봇팔 (E0509 비슷한 6축 모형, 치수는 단순화) ---------- */
+const A=.409, B=.367, BASE_H=.155, TOOL=.124, GRASP=TOOL+.066;
+const robot=(()=>{
+  const g=new THREE.Group(); scene.add(g);
+  const white=M(0xeef1f4,{roughness:.38}), grey=M(0x7f8a96), dark=M(0x2a3139,{roughness:.6});
+  const cyl=(r,h,m)=>{ const x=new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,40),m); x.castShadow=true; x.receiveShadow=true; return x; };
+  const foot=cyl(.1,.02,dark); foot.position.y=.01; g.add(foot);
+  const body=cyl(.072,.11,white); body.position.y=.075; g.add(body);
+  const ledMat=new THREE.MeshStandardMaterial({color:0xd8a300,emissive:0xd8a300,emissiveIntensity:.9});
+  const led=new THREE.Mesh(new THREE.TorusGeometry(.0735,.006,10,56),ledMat); led.rotation.x=Math.PI/2; led.position.y=.122; g.add(led);
+  const j1=new THREE.Group(); g.add(j1);
+  const tower=cyl(.064,.05,white); tower.position.y=.14; j1.add(tower);
+  const sh=new THREE.Group(); sh.position.y=BASE_H; j1.add(sh);
+  const shJ=cyl(.066,.15,white); shJ.rotation.x=Math.PI/2; sh.add(shJ);
+  const shC=cyl(.046,.154,grey); shC.rotation.x=Math.PI/2; sh.add(shC);
+  const up=cyl(.042,A,white); up.rotation.z=-Math.PI/2; up.position.x=A/2; sh.add(up);
+  const el=new THREE.Group(); el.position.x=A; sh.add(el);
+  const elJ=cyl(.055,.12,white); elJ.rotation.x=Math.PI/2; el.add(elJ);
+  const elC=cyl(.038,.124,grey); elC.rotation.x=Math.PI/2; el.add(elC);
+  const fo=cyl(.035,B,white); fo.rotation.z=-Math.PI/2; fo.position.x=B/2; el.add(fo);
+  const wr=new THREE.Group(); wr.position.x=B; el.add(wr);
+  const wrJ=cyl(.043,.1,white); wrJ.rotation.x=Math.PI/2; wr.add(wrJ);
+  const wrC=cyl(.03,.104,grey); wrC.rotation.x=Math.PI/2; wr.add(wrC);
+  const tl=cyl(.034,TOOL,white); tl.rotation.z=-Math.PI/2; tl.position.x=TOOL/2; wr.add(tl);
+  const fl=cyl(.037,.012,dark); fl.rotation.z=-Math.PI/2; fl.position.x=TOOL; wr.add(fl);
+  const palm=new THREE.Mesh(new THREE.BoxGeometry(.03,.06,.11),dark); palm.position.x=TOOL+.021; palm.castShadow=true; wr.add(palm);
+  const f1=new THREE.Mesh(new THREE.BoxGeometry(.06,.032,.012),grey); f1.castShadow=true; const f2=f1.clone();
+  f1.position.x=f2.position.x=TOOL+.036+.03; wr.add(f1,f2);
+  const nameplate=label('<code>/dsr01</code> · e0509','acc',[.5,0]); nameplate.position.set(0,.02,.13); g.add(nameplate); show(nameplate,false);
+
+  // 끝단 궤적
+  const TRN=6000, trPos=new Float32Array(TRN*3), trGeo=new THREE.BufferGeometry();
+  trGeo.setAttribute('position',new THREE.BufferAttribute(trPos,3)); trGeo.setDrawRange(0,0);
+  const trail=new THREE.Line(trGeo,new THREE.LineBasicMaterial({color:ACC_C})); trail.frustumCulled=false; scene.add(trail);
+  let trN=0;
+
+  const tip=[...HOME];
+  const LED={manual:0xd8a300, auto:0x2fb35a};
+  return {
+    group:g, nameplate,
+    tip,
+    tipV(){ return R(...tip); },
+    set(x,y,z){
+      tip[0]=x; tip[1]=y; tip[2]=z;
+      const X=x/1000, Y=y/1000, Z=z/1000;
+      const yaw=Math.atan2(Y,X), r=Math.hypot(X,Y), h=Z+GRASP-BASE_H;
+      const d=Math.min(Math.hypot(r,h), A+B-1e-4);
+      const beta=-Math.acos(clamp((d*d-A*A-B*B)/(2*A*B),-1,1));
+      const alpha=Math.atan2(h,r)-Math.atan2(B*Math.sin(beta),A+B*Math.cos(beta));
+      j1.rotation.y=yaw; sh.rotation.z=alpha; el.rotation.z=beta; wr.rotation.z=-Math.PI/2-alpha-beta;
+    },
+    grip(open){ const gap=lerp(.04,.084,clamp(open)); f1.position.z=gap/2+.006; f2.position.z=-(gap/2+.006); },
+    led(mode){ const c=LED[mode]; ledMat.color.setHex(c); ledMat.emissive.setHex(c); },
+    trailPush(){ if(trN>=TRN) return; const v=R(...tip); trPos.set([v.x,v.y,v.z],trN*3); trN++; trGeo.setDrawRange(0,trN); trGeo.attributes.position.needsUpdate=true; },
+    trailClear(){ trN=0; trGeo.setDrawRange(0,0); },
+    reset(){ this.set(...HOME); this.grip(1); this.trailClear(); this.led('manual'); show(nameplate,false); }
+  };
+})();
+
+/* ---------- movel 속도 프로파일 (사다리꼴 / 삼각형) ---------- */
+function profile(L,v,a){
+  if(L<1e-6) return {T:0,vp:0,tri:false,s:()=>L,vel:()=>0};
+  let ta=v/a, la=.5*a*ta*ta, vp=v, tc, tri=false;
+  if(2*la>L){ ta=Math.sqrt(L/a); vp=a*ta; la=L/2; tc=0; tri=true; } else tc=(L-2*la)/v;
+  const T=2*ta+tc;
+  return { T, vp, tri, ta, tc,
+    s(t){ t=clamp(t,0,T); if(t<ta) return .5*a*t*t; if(t<ta+tc) return la+vp*(t-ta); const td=T-t; return L-.5*a*td*td; },
+    vel(t){ t=clamp(t,0,T); if(t<ta) return a*t; if(t<ta+tc) return vp; return a*(T-t); } };
+}
+function moveLine(p,q){
+  const L=Math.hypot(q[0]-p[0],q[1]-p[1],q[2]-p[2]), pr=profile(L,P.VEL,P.ACC);
+  return {...pr, L, at(t){ const k=L?pr.s(t)/L:1; return [p[0]+(q[0]-p[0])*k, p[1]+(q[1]-p[1])*k, p[2]+(q[2]-p[2])*k]; }};
+}
+function moveCap(m){
+  const shape = m.tri
+    ? `거리가 짧아서 VEL(${P.VEL}mm/s)에 닿기 전에 감속해요. 그래서 속도 그래프가 삼각형이에요.`
+    : `가속 → 등속 ${P.VEL}mm/s → 감속, 그래프가 사다리꼴이에요.`;
+  return `이동 거리 ${fmt(m.L)}mm, 약 ${fmt(m.T,2)}초. ${shape}`;
+}
+function moveStep(p,q,lines,capFn,onceFn){
+  const m=moveLine(p,q);
+  return { d:Math.max(m.T,.05), lines, inTry:false, cap:capFn(m), m,
+    once(){ onceFn&&onceFn(); graphBegin(m); },
+    run(pp){ const t=pp*m.T; robot.set(...m.at(t)); robot.trailPush(); graphAt(t); } };
+}
+
+/* ---------- 속도 그래프 / 터미널 ---------- */
+const gc=$('#graph'), gx=gc.getContext('2d'); let gm=null, gt=0;
+function graphBegin(m){ gm=m; gt=0; drawGraph(); }
+function graphAt(t){ gt=t; drawGraph(); }
+function graphClear(){ gm=null; drawGraph(); }
+function drawGraph(){
+  const w=gc.clientWidth, h=gc.clientHeight; if(!w||!h) return;
+  const dpr=Math.min(devicePixelRatio,2); if(gc.width!==w*dpr){ gc.width=w*dpr; gc.height=h*dpr; }
+  gx.setTransform(dpr,0,0,dpr,0,0); gx.clearRect(0,0,w,h);
+  const ink=css('--ink'), mut=css('--muted'), ln=css('--line'), acc=css('--accent');
+  const L=34, Rt=10, Tp=22, Bt=18, W=w-L-Rt, H=h-Tp-Bt;
+  gx.font='500 10.5px "IBM Plex Sans KR", sans-serif'; gx.fillStyle=mut; gx.fillText('끝단 속도 (mm/s)',8,14);
+  const vmax=Math.max(P.VEL,20)*1.18, T=gm?Math.max(gm.T,.01):2;
+  const X=t=>L+t/T*W, Y=v=>Tp+H-v/vmax*H;
+  gx.strokeStyle=ln; gx.lineWidth=1; gx.beginPath(); gx.moveTo(L,Tp); gx.lineTo(L,Tp+H); gx.lineTo(L+W,Tp+H); gx.stroke();
+  gx.setLineDash([3,3]); gx.beginPath(); gx.moveTo(L,Y(P.VEL)); gx.lineTo(L+W,Y(P.VEL)); gx.stroke(); gx.setLineDash([]);
+  gx.font='10px "IBM Plex Mono", monospace'; gx.fillStyle=mut; gx.textAlign='right';
+  gx.fillText(String(P.VEL),L-4,Y(P.VEL)+3); gx.fillText('0',L-4,Tp+H+3);
+  gx.textAlign='left'; gx.fillText('0 s',L,h-4); gx.textAlign='right'; gx.fillText(gm?fmt(gm.T,2)+' s':'',L+W,h-4); gx.textAlign='left';
+  if(!gm) return;
+  gx.strokeStyle=mut; gx.globalAlpha=.45; gx.beginPath();
+  for(let i=0;i<=60;i++){ const t=i/60*gm.T; i?gx.lineTo(X(t),Y(gm.vel(t))):gx.moveTo(X(t),Y(gm.vel(t))); } gx.stroke(); gx.globalAlpha=1;
+  gx.strokeStyle=acc; gx.lineWidth=2; gx.beginPath();
+  const n=Math.max(1,Math.round(60*gt/gm.T));
+  for(let i=0;i<=n;i++){ const t=i/n*gt; i?gx.lineTo(X(t),Y(gm.vel(t))):gx.moveTo(X(t),Y(gm.vel(t))); } gx.stroke();
+  gx.fillStyle=acc; gx.beginPath(); gx.arc(X(gt),Y(gm.vel(gt)),3.2,0,7); gx.fill();
+  gx.fillStyle=ink; gx.font='500 10.5px "IBM Plex Mono", monospace'; gx.textAlign='right'; gx.fillText(fmt(gm.vel(gt),0)+' mm/s',L+W,14); gx.textAlign='left';
+}
+const conEl=$('#console'); let conLines=[];
+const cprint=s=>{ conLines.push(s); while(conLines.length>7) conLines.shift(); conEl.textContent=conLines.join('\n'); };
+const cclear=()=>{ conLines=[]; conEl.textContent='(아직 출력 없음)'; };
+
+/* ================= 장면 정의 ================= */
+const sections=[];
+
+/* ---- 1. import ---- */
+{
+  const g=new THREE.Group(); scene.add(g);
+  const fileP=V(-.8,.82,.32);
+  const file=new THREE.Mesh(new THREE.BoxGeometry(.22,.29,.025),M(0xffffff,{roughness:.8})); file.position.copy(fileP); file.castShadow=true; g.add(file);
+  for(let i=0;i<6;i++){ const t=new THREE.Mesh(new THREE.BoxGeometry(i%3==2?.1:.15,.012,.004),M(0x9aa6b2)); t.position.set(-.015+(i%3==2?-.025:0),.09-i*.036,.014); file.add(t); }
+  const fl=label('<code>move_basic.py</code>','',[.5,1]); fl.position.set(0,.2,0); file.add(fl);
+  const defs=[
+    {n:'time',d:'기다리기 (sleep)',c:0x8b9aab,s:V(-1.35,1.25,-.1)},
+    {n:'rclpy',d:'ROS 2 통신',c:0x3b78d4,s:V(-.25,1.32,-.25)},
+    {n:'DR_init',d:'두산 설정 저장소',c:ACC_C,s:V(-1.45,.42,.65)},
+    {n:'Trigger',d:'빈 요청 → success, message',c:OK_C,s:V(-.2,.3,.85)},
+  ];
+  const blocks=defs.map((d,k)=>{
+    const m=new THREE.Mesh(new THREE.BoxGeometry(.1,.1,.1),M(d.c,{roughness:.35})); m.castShadow=true; g.add(m);
+    const l=label(`<code>${d.n}</code><small>${d.d}</small>`,'',[0,.5]); l.position.set(.075,0,0); m.add(l);
+    return {m, s:d.s, t:V(-.55,1.0-k*.135,.32), c:V((d.s.x-.55)/2,Math.max(d.s.y,1.0-k*.135)+.35,(d.s.z+.32)/2), state:'float'};
+  });
+  const link=line([V(0,0,0),V(0,0,0)],0x3b78d4,true); g.add(link);
+  const linkL=label('rclpy로 로봇 드라이버와 통신','',[.5,1]); g.add(linkL);
+  const fly=k=>({ d:1.5, lines:[k+1], cap:[
+      '<code>import time</code> 파이썬 기본 모듈이에요. 그리퍼가 움직이는 동안 <code>time.sleep()</code>으로 기다릴 때 써요.',
+      '<code>import rclpy</code> ROS 2를 파이썬에서 쓰게 해 주는 라이브러리예요. 노드를 만들고 서비스를 호출할 때 필요해요.',
+      '<code>import DR_init</code> 두산 라이브러리의 설정 저장소예요. 로봇 ID, 모델, 노드를 여기에 넣어 둬요.',
+      '<code>Trigger</code> 요청은 비어 있고 응답으로 <code>success</code>, <code>message</code>가 와요. 열기·닫기처럼 인자가 필요 없는 명령에 맞아요.'][k],
+    run(p){ const b=blocks[k]; b.state='fly'; const e=ease(p); b.m.position.copy(bez(b.s,b.c,b.t,e)); b.m.rotation.set(0,(1-e)*Math.PI*1.5,0); if(p>=1) b.state='dock'; } });
+  sections.push({ group:g, cam:[V(-1.25,1.35,2.0),V(-.35,.62,.2)],
+    reset(){ blocks.forEach(b=>{b.state='float'; b.m.position.copy(b.s);}); link.visible=false; show(linkL,false); },
+    build(){ return [
+      { d:2.2, lines:[], cap:'<code>move_basic.py</code>가 쓸 도구 네 가지가 아직 따로 떠 있어요. import 줄이 실행될 때마다 하나씩 파일로 들어와요.' },
+      fly(0), fly(1), fly(2), fly(3),
+      { d:2.2, lines:[2], cap:'도구가 모두 준비됐어요. 이 가운데 <code>rclpy</code>가 이 파일과 로봇 드라이버 사이의 통신을 맡아요.',
+        run(p){ link.visible=true; const a=blocks[1].t, b=V(0,.12,0); setLine(link,a,a.clone().lerp(b,ease(seg(p,0,.7)))); show(linkL,p>.7); linkL.position.copy(a.clone().lerp(b,.5)); } },
+    ]; },
+    frame(time){ blocks.forEach((b,k)=>{ if(b.state==='float'){ b.m.position.set(b.s.x,b.s.y+Math.sin(time*1.3+k*1.7)*.025,b.s.z); b.m.rotation.y=time*.4+k; } else if(b.state==='dock'){ b.m.position.copy(b.t); b.m.rotation.set(0,0,0); } }); }
+  });
+}
+
+/* ---- 2. 로봇 설정 ---- */
+{
+  const g=new THREE.Group(); scene.add(g);
+  const cab=new THREE.Group(); cab.position.set(-.7,.42,.42); g.add(cab);
+  const body=new THREE.Mesh(new THREE.BoxGeometry(.34,.32,.26),M(0xc9d0d7)); body.castShadow=true; cab.add(body);
+  const cabL=label('<code>DR_init</code>','acc',[.5,1]); cabL.position.set(0,.2,0); cab.add(cabL);
+  const drawers=[0,1].map(i=>{
+    const dg=new THREE.Group(); dg.position.set(0,.075-i*.15,.0); cab.add(dg);
+    const front=new THREE.Mesh(new THREE.BoxGeometry(.3,.12,.02),M(0xf3f5f7)); front.position.z=.14; dg.add(front);
+    const tray=new THREE.Mesh(new THREE.BoxGeometry(.28,.02,.24),M(0x9aa5b0)); tray.position.set(0,-.045,.01); dg.add(tray);
+    const h=new THREE.Mesh(new THREE.BoxGeometry(.08,.014,.014),M(0x2a3139)); h.position.set(0,0,.157); dg.add(h);
+    const l=label(i?'<code>__dsr__model</code>':'<code>__dsr__id</code>','plain',[1,.5]); l.position.set(-.16,0,.15); dg.add(l);
+    return dg;
+  });
+  const cards=['dsr01','e0509'].map((t,i)=>{
+    const c=new THREE.Mesh(new THREE.BoxGeometry(.15,.085,.008),M(i?0x3b78d4:ACC_C,{roughness:.4})); c.castShadow=true; g.add(c);
+    const l=label(`<code>"${t}"</code>`,'',[.5,1]); l.position.set(0,.06,0); c.add(l);
+    return {c, s:V(-1.25,1.15-i*.18,.55), l};
+  });
+  const ring=new THREE.Group(); ring.position.y=.5; g.add(ring);
+  ring.add(new THREE.Mesh(new THREE.TorusGeometry(.62,.005,8,96),M(0x3b78d4,{emissive:0x1d4d8f,emissiveIntensity:.5})));
+  ring.children[0].rotation.x=Math.PI/2;
+  const names=['/dsr01/joint_states','/dsr01/motion/move_line','/dsr01/system/set_robot_mode'];
+  names.forEach((n,i)=>{ const a=i/names.length*Math.PI*2+.6; const s=new THREE.Mesh(new THREE.SphereGeometry(.018,16,12),M(0x3b78d4)); s.position.set(Math.cos(a)*.62,0,Math.sin(a)*.62); ring.add(s); const l=label(`<code>${n}</code><small>(예시)</small>`,'',[.5,1.15]); s.add(l); });
+  const drawerMove=(k,p)=>{ const open=p<.25?ease(seg(p,0,.25)):p<.8?1:1-ease(seg(p,.8,1)); drawers[k].position.z=open*.16; };
+  const cardFly=(k,p)=>{ const c=cards[k], dg=drawers[k]; const target=new THREE.Vector3(0,-.02,.17).add(dg.position).add(cab.position); target.z=cab.position.z+.17+.16*(p<.8?1:1-ease(seg(p,.8,1)));
+    const e=ease(seg(p,.2,.78)); c.c.position.copy(bez(c.s,V((c.s.x+target.x)/2,c.s.y+.15,(c.s.z+target.z)/2+.2),target,e)); c.c.rotation.x=-e*Math.PI/2; show(c.l,p<.6); c.c.visible=p<.97; };
+  sections.push({ group:g, cam:[V(-1.0,1.25,2.15),V(-.3,.5,.25)],
+    reset(){ drawers.forEach(d=>d.position.z=0); cards.forEach(c=>{c.c.position.copy(c.s); c.c.rotation.set(0,0,0); c.c.visible=false; c.c.scale.setScalar(1); show(c.l,true);}); ring.visible=false; },
+    build(){ return [
+      { d:1.6, lines:[6], cap:'<code>ROBOT_ID = "dsr01"</code> 드라이버가 쓰는 로봇 이름이에요. 토픽과 서비스가 <code>/dsr01/...</code> 아래에 생겨요.',
+        run(p){ const c=cards[0]; c.c.visible=true; c.c.scale.setScalar(Math.max(.001,ease(p))); } },
+      { d:1.6, lines:[7], cap:'<code>ROBOT_MODEL = "e0509"</code> 로봇 모델명이에요. 모델마다 관절 한계 같은 값이 달라요.',
+        run(p){ const c=cards[1]; c.c.visible=true; c.c.scale.setScalar(Math.max(.001,ease(p))); } },
+      { d:2.2, lines:[8], cap:'<code>DR_init.__dsr__id</code> 서랍을 열고 <code>"dsr01"</code> 카드를 넣어요.', run(p){ drawerMove(0,p); cardFly(0,p); } },
+      { d:2.2, lines:[9], cap:'<code>DR_init.__dsr__model</code> 서랍에 <code>"e0509"</code> 카드를 넣어요.', run(p){ drawerMove(1,p); cardFly(1,p); } },
+      { d:2.6, lines:[8,9], cap:'이제 두산 라이브러리는 <code>/dsr01</code> 이름으로 이 로봇의 토픽과 서비스를 찾아요. 링 위 이름은 (예시)예요.',
+        run(p){ show(robot.nameplate,p>.1); ring.visible=p>.25; ring.scale.setScalar(Math.max(.001,ease(seg(p,.25,.8)))); } },
+    ]; },
+    frame(time){ ring.rotation.y=time*.12; }
+  });
+}
+
+/* ---- 3. 조절할 값 ---- */
+const s3={};
+{
+  const g=new THREE.Group(); scene.add(g);
+  const sph=c=>{ const m=new THREE.Mesh(new THREE.SphereGeometry(.02,24,16),M(c,{transparent:true,opacity:.85,emissive:c,emissiveIntensity:.25})); g.add(m); return m; };
+  s3.p1=sph(P1_C); s3.p2=sph(ACC_C);
+  s3.l1=label('P1 · 지금 위치','',[.5,1.3]); s3.p1.add(s3.l1);
+  s3.l2=label('P2','acc',[.5,1.3]); s3.p2.add(s3.l2);
+  s3.dx=line([V(0,0,0),V(0,0,0)],P1_C,true); s3.dy=line([V(0,0,0),V(0,0,0)],ACC_C,true); s3.dd=line([V(0,0,0),V(0,0,0)],0x8893a0,false,.6); g.add(s3.dx,s3.dy,s3.dd);
+  s3.ldx=label('','',[.5,-.25]); s3.ldy=label('','',[0,.5]); s3.ldd=label('','plain',[.5,-.2]); g.add(s3.ldx,s3.ldy,s3.ldd);
+  s3.drop1=line([V(0,0,0),V(0,0,0)],0x8893a0,true,.6); s3.drop2=line([V(0,0,0),V(0,0,0)],0x8893a0,true,.6); g.add(s3.drop1,s3.drop2);
+  s3.lz=label('높이 400 mm','plain',[0,.5]); g.add(s3.lz);
+  s3.rep=label('','acc',[.5,0]); g.add(s3.rep);
+  s3.barEl=barEl('GRIP_WAIT'); s3.bar=rawLabel(s3.barEl,[.5,1.6]); g.add(s3.bar);
+  s3.update=(px=1,py=1)=>{
+    const a=R(...HOME), q=p2of(), b=R(...q), mid=R(q[0],HOME[1],HOME[2]);
+    s3.p1.position.copy(a); s3.p2.position.copy(b);
+    setLine(s3.dx,a,a.clone().lerp(mid,px)); setLine(s3.dy,mid,mid.clone().lerp(b,py)); setLine(s3.dd,a,b);
+    s3.ldx.position.copy(a.clone().lerp(mid,.5)); s3.ldx.element.innerHTML=`<code>OFFSET_X</code> ${P.OFFSET_X} mm`;
+    s3.ldy.position.copy(mid.clone().lerp(b,.5)).add(V(.02,0,0)); s3.ldy.element.innerHTML=`<code>OFFSET_Y</code> ${P.OFFSET_Y} mm`;
+    s3.ldd.position.copy(a.clone().lerp(b,.5)); s3.ldd.element.innerHTML=`거리 ${fmt(Math.hypot(P.OFFSET_X,P.OFFSET_Y))} mm`;
+    setLine(s3.drop1,a,V(a.x,0,a.z)); setLine(s3.drop2,b,V(b.x,0,b.z)); s3.lz.position.set(a.x+.02,.2,a.z);
+    s3.rep.position.copy(a.clone().lerp(b,.5)).add(V(0,.1,0)); s3.rep.element.innerHTML=`<code>REPEAT</code> × ${P.REPEAT} 왕복`;
+    s3.bar.position.copy(robot.tipV());
+  };
+  sections.push({ group:g, cam:[V(1.05,1.25,1.25),V(.42,.36,-.05)],
+    reset(){ s3.update(0,0); s3.p2.visible=false; [s3.l2,s3.ldx,s3.ldy,s3.ldd,s3.rep,s3.bar].forEach(o=>show(o,false)); s3.dd.visible=false; },
+    build(){ const q=p2of(); return [
+      { d:2.0, lines:[11], cap:`<code>REPEAT = ${P.REPEAT}</code> P1과 P2 사이를 몇 번 왕복할지 정해요. 5번 장면에서 이 횟수만큼 반복해요.`, run(p){ show(s3.rep,p>.15); } },
+      { d:2.6, lines:[12,13], cap:`P2는 지금 위치(P1)에서 X로 ${P.OFFSET_X}mm, Y로 ${P.OFFSET_Y}mm 떨어진 점이에요. 높이와 그리퍼 자세는 그대로예요.`,
+        run(p){ s3.update(ease(seg(p,0,.4)),ease(seg(p,.4,.8))); show(s3.ldx,p>.4); show(s3.ldy,p>.8); s3.p2.visible=p>.75; show(s3.l2,p>.8); s3.dd.visible=p>.9; show(s3.ldd,p>.9); } },
+      moveStep(HOME,q,[14,15],m=>`<code>VEL</code>, <code>ACC</code>로 P2까지 미리 움직여 봐요. ${moveCap(m)}`),
+      moveStep(q,HOME,[14,15],m=>`다시 P1로 돌아와요. 슬라이더로 VEL·ACC를 바꾸고 재생하면 걸리는 시간과 그래프 모양이 달라져요.`),
+      { d:.5+P.GRIP_WAIT+.5, lines:[16], cap:`<code>GRIP_WAIT = ${fmt(P.GRIP_WAIT)}</code> 그리퍼 명령 뒤에 ${fmt(P.GRIP_WAIT)}초 기다려요. 집게가 끝까지 움직일 시간을 주는 거예요.`,
+        run(p){ const t=p*this.d; robot.grip(t<.5?1-ease(t/.5):t<.5+P.GRIP_WAIT?0:ease(seg(t,.5+P.GRIP_WAIT,1+P.GRIP_WAIT))); s3.bar.position.copy(robot.tipV());
+          show(s3.bar,t>=.5&&t<.5+P.GRIP_WAIT+.001&&P.GRIP_WAIT>0); setBar(s3.barEl,P.GRIP_WAIT?(t-.5)/P.GRIP_WAIT:1,`time.sleep(${fmt(P.GRIP_WAIT)}) ${fmt(clamp(t-.5,0,P.GRIP_WAIT))}s`); } },
+    ]; }
+  });
+}
+
+/* ---- 4. call_gripper ---- */
+let scenario='ok';
+{
+  const g=new THREE.Group(); scene.add(g);
+  const Ap=V(-.78,1.08,0), Bp=V(.78,1.08,0);
+  const nodeA=new THREE.Mesh(new THREE.SphereGeometry(.085,32,20),M(0x3b78d4,{roughness:.3})); nodeA.position.copy(Ap); g.add(nodeA);
+  const la=label('<code>move_basic</code> 노드','',[.5,-.55]); nodeA.add(la); la.position.y=.0;
+  const gear=new THREE.Group(); gear.position.copy(Ap); g.add(gear);
+  const gt=new THREE.Mesh(new THREE.TorusGeometry(.125,.008,8,48),M(0x7f8a96)); gear.add(gt);
+  for(let i=0;i<8;i++){ const t=new THREE.Mesh(new THREE.BoxGeometry(.03,.02,.016),M(0x7f8a96)); const a=i/8*Math.PI*2; t.position.set(Math.cos(a)*.14,Math.sin(a)*.14,0); t.rotation.z=a; gear.add(t); }
+  const nodeBMat=M(0x2f9a55,{roughness:.3,transparent:true,opacity:1});
+  const nodeB=new THREE.Mesh(new THREE.SphereGeometry(.085,32,20),nodeBMat); nodeB.position.copy(Bp); g.add(nodeB);
+  const lb=label('그리퍼 서비스 노드<small><code>/dsr01/gripper/close</code></small>','',[.5,-.4]); nodeB.add(lb);
+  const tube=new THREE.Mesh(new THREE.CylinderGeometry(.022,.022,Bp.x-Ap.x-.17,24,1,true),M(0x9fb3c7,{transparent:true,opacity:.28,side:THREE.DoubleSide}));
+  tube.rotation.z=Math.PI/2; tube.position.copy(Ap.clone().lerp(Bp,.5)); g.add(tube);
+  const lt=label('ROS 2 네트워크','plain',[.5,-1]); lt.position.copy(tube.position); g.add(lt);
+  const toGrip=line([V(0,0,0),V(0,0,0)],0x2f9a55,true,.8); g.add(toGrip);
+  const pulse=new THREE.Mesh(new THREE.SphereGeometry(.018,16,12),M(0xffffff,{emissive:0x9fc4ff,emissiveIntensity:1})); g.add(pulse);
+  const env=(c)=>{ const m=new THREE.Mesh(new THREE.BoxGeometry(.075,.05,.012),M(c,{roughness:.5})); m.castShadow=true; g.add(m); return m; };
+  const req=env(ACC_C), res=env(0x2f9a55);
+  const lreq=label('요청 <code>Trigger.Request()</code><small>(빈 요청)</small>','acc',[.5,1.2]); req.add(lreq);
+  const lres=label('응답 <code>success=True</code>','ok',[.5,1.2]); res.add(lres);
+  const futP=V(-.78,.8,.12);
+  const fut=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(.12,.1,.1)),new THREE.LineBasicMaterial({color:0x8893a0})); fut.position.copy(futP); g.add(fut);
+  const futFillMat=M(0x2f9a55,{transparent:true,opacity:.75}); const futFill=new THREE.Mesh(new THREE.BoxGeometry(.11,.09,.09),futFillMat); futFill.position.copy(futP); g.add(futFill);
+  const lf=label('<code>future</code>','',[0,.5]); lf.position.copy(futP).add(V(.08,0,0)); g.add(lf);
+  const tEl=timerEl(), tL=rawLabel(tEl,[.5,1.25]); tL.position.copy(Ap).add(V(0,.13,0)); g.add(tL);
+  const tCap=label('','plain',[.5,0]); tCap.position.copy(Ap).add(V(0,.31,0)); g.add(tCap);
+  const err=label('','err',[.5,0]); err.position.copy(Ap).add(V(0,-.17,.0)); g.add(err);
+  const ret=label('','',[0,.5]); ret.position.copy(futP).add(V(.08,-.07,0)); g.add(ret);
+  const gbEl=barEl(''), gb=rawLabel(gbEl,[.5,1.6]); g.add(gb);
+  const along=(a,b,t)=>a.clone().lerp(b,t);
+  const A2=Ap.clone().add(V(.1,0,0)), B2=Bp.clone().add(V(-.1,0,0));
+  const waitStep=(found,dur)=>({ d:dur, lines:[21], cap: found
+      ? '<code>wait_for_service</code> 서비스가 있는지 최대 3초까지 확인해요. 여기서는 금방 찾았어요.'
+      : '<code>wait_for_service</code> 서비스를 3초 동안 찾지만, 그리퍼 서비스 노드가 실행되지 않아서 찾지 못해요.',
+    run(p){ const t=p*this.d; show(tL,true); setTimer(tEl,t,3); tCap.element.innerHTML='<code>timeout_sec=3.0</code>'; show(tCap,true);
+      pulse.visible=true; const k=(t*1.6)%1; pulse.position.copy(along(A2, found?B2:Ap.clone().lerp(Bp,.55), k));
+      if(found){ nodeBMat.emissive.setHex(0x2f9a55); nodeBMat.emissiveIntensity=p>.7?.6:0; } if(p>=1) pulse.visible=false; } });
+  sections.push({ group:g, cam:[V(.0,1.3,2.55),V(.05,.85,0)],
+    reset(){ const absent=scenario==='nosrv'; nodeBMat.opacity=absent?.22:1; nodeBMat.emissiveIntensity=0;
+      lb.element.innerHTML=absent?'그리퍼 서비스 노드<small>(실행 안 됨)</small>':'그리퍼 서비스 노드<small><code>/dsr01/gripper/close</code></small>';
+      req.visible=res.visible=false; pulse.visible=false; fut.visible=futFill.visible=false; show(lf,false); [tL,tCap,err,ret,gb].forEach(o=>show(o,false));
+      gear.rotation.z=0; gear.visible=false; toGrip.visible=!absent; },
+    build(){
+      const callStep={ d:1.4, lines:[24], cap:'<code>call_async</code> 빈 요청을 보내고, 결과가 나중에 들어올 빈 <code>future</code> 상자를 바로 받아요.',
+        run(p){ show(tL,false); show(tCap,false); fut.visible=true; show(lf,true); req.visible=p<.98; req.position.copy(along(A2,B2,ease(p))); } };
+      if(scenario==='nosrv') return [ waitStep(false,3),
+        { d:2.4, lines:[22,23], cap:'3초가 지나도 못 찾으면 에러 로그를 남기고 <code>False</code>를 돌려줘요. 요청은 보내지 않아요.',
+          run(p){ err.element.innerHTML='[ERROR] gripper/close 서비스를 찾을 수 없음'; show(err,p>.1); ret.element.innerHTML='<code>return False</code>'; ret.position.copy(Ap).add(V(.12,-.05,0)); show(ret,p>.5); } } ];
+      if(scenario==='noresp') return [ waitStep(true,1.2), callStep,
+        { d:5, lines:[25], cap:'<code>spin_until_future_complete</code> 노드를 돌리며 최대 5초 기다려요. 이번에는 서비스가 응답하지 않아요.',
+          run(p){ gear.visible=true; gear.rotation.z=-p*this.d*3; show(tL,true); setTimer(tEl,p*5,5); tCap.element.innerHTML='<code>timeout_sec=5.0</code>'; show(tCap,true); } },
+        { d:2.6, lines:[26,27,28,29], cap:'5초가 지나도 future가 비어 있으면 <code>result()</code>가 <code>None</code>이에요. 에러 로그를 남기고 <code>False</code>를 돌려줘요.',
+          run(p){ gear.visible=false; show(tL,false); show(tCap,false); futFill.visible=true; futFillMat.color.setHex(0x8893a0); futFill.scale.setScalar(.25);
+            err.element.innerHTML='[ERROR] gripper/close 응답 없음'; show(err,p>.2); ret.element.innerHTML='<code>res is None</code> → <code>return False</code>'; show(ret,p>.5); } } ];
+      return [ waitStep(true,1.2), callStep,
+        { d:1.8, lines:[25], cap:'<code>spin_until_future_complete</code> 노드가 돌아야(spin) 응답이 처리돼요. 응답이 오면 5초를 다 기다리지 않고 바로 끝나요.',
+          run(p){ gear.visible=true; gear.rotation.z=-p*this.d*3; show(tL,true); setTimer(tEl,p*this.d,5); tCap.element.innerHTML='<code>timeout_sec=5.0</code>'; show(tCap,true);
+            res.visible=p>.3; res.position.copy(along(B2,futP,ease(seg(p,.3,1)))); } },
+        { d:1.2, lines:[26,27], cap:'<code>future.result()</code> 응답이 future에 들어 있으니 <code>None</code>이 아니에요.',
+          run(p){ gear.visible=false; show(tL,false); show(tCap,false); res.visible=p<.4; futFill.visible=true; futFillMat.color.setHex(0x2f9a55); futFill.scale.setScalar(Math.max(.01,ease(p))); } },
+        { d:.3+P.GRIP_WAIT+.2, lines:[30,31], cap:`결과를 출력하고 <code>time.sleep(GRIP_WAIT)</code>로 ${fmt(P.GRIP_WAIT)}초 기다려요. 그동안 집게가 실제로 닫혀요.`,
+          run(p){ const t=p*this.d; robot.grip(1-ease(clamp(t/(.3+P.GRIP_WAIT*.6)))); gb.position.copy(robot.tipV()); show(gb,P.GRIP_WAIT>0); setBar(gbEl,P.GRIP_WAIT?(t-.3)/P.GRIP_WAIT:1,`sleep ${fmt(clamp(t-.3,0,P.GRIP_WAIT))}s / ${fmt(P.GRIP_WAIT)}s`); } },
+        { d:1.4, lines:[32], cap:'<code>return res.success</code> 응답에 담긴 성공 여부(<code>True</code>)를 돌려주고 함수가 끝나요.',
+          run(p){ show(gb,false); ret.element.innerHTML='<code>return True</code>'; ret.position.copy(futP).add(V(.08,-.07,0)); show(ret,true); } } ];
+    },
+    frame(){ if(toGrip.visible) setLine(toGrip,Bp.clone().add(V(0,-.09,0)),robot.tipV()); }
+  });
+}
+
+/* ---- 5. main ---- */
+let s5;
+{
+  const g=new THREE.Group(); scene.add(g);
+  const Np=V(-.72,1.08,.12);
+  const nodeMat=M(0x3b78d4,{roughness:.3,transparent:true,opacity:1});
+  const node=new THREE.Mesh(new THREE.SphereGeometry(.08,32,20),nodeMat); node.position.copy(Np); g.add(node);
+  const nl=label('<code>/dsr01/move_basic</code><small>노드 이름 + 네임스페이스</small>','',[.5,-.45]); node.add(nl);
+  const toBase=line([V(0,0,0),V(0,0,0)],0x3b78d4,true); g.add(toBase);
+  const tbl=label('<code>DR_init.__dsr__node = node</code>','',[.5,1]); g.add(tbl);
+  const chips=new THREE.Group(); chips.position.copy(Np); g.add(chips);
+  const chipC=[0xd4710f,0x3b78d4,0x2f9a55,0x8b9aab,0xd4a300,0x7a4fb0];
+  for(let i=0;i<6;i++){ const c=new THREE.Mesh(new THREE.BoxGeometry(.04,.04,.04),M(chipC[i])); const a=i/6*Math.PI*2; c.position.set(Math.cos(a)*.17,Math.sin(a)*.05,Math.sin(a)*.17); chips.add(c); }
+  const chipL=label('<code>movel · posx · get_current_posx</code><small><code>set_robot_mode · ROBOT_MODE_AUTONOMOUS · DR_BASE</code></small>','',[1,.5]); chipL.position.copy(Np).add(V(-.2,0,0)); g.add(chipL);
+  const cl1=line([V(0,0,0),V(0,0,0)],0x2f9a55,true), cl2=line([V(0,0,0),V(0,0,0)],ACC_C,true); g.add(cl1,cl2);
+  const cl1L=label('<code>/dsr01/gripper/open</code>','',[.5,1]), cl2L=label('<code>/dsr01/gripper/close</code>','',[.5,0]); g.add(cl1L,cl2L);
+  const modeL=label('수동 → <b>자동</b> (AUTONOMOUS)','ok',[0,.5]); modeL.position.set(.1,.12,.05); g.add(modeL);
+  const cone=new THREE.Mesh(new THREE.ConeGeometry(.07,.3,32,1,true),M(0x9fc4ff,{transparent:true,opacity:.22,side:THREE.DoubleSide,emissive:0x5f8fd0,emissiveIntensity:.4})); g.add(cone);
+  const posL=label('<code>[400.0, 0.0, 400.0, 0.0, 180.0, 0.0]</code><small>x, y, z (mm) · rx, ry, rz (deg) · 예시 값</small>','acc',[0,1.2]); g.add(posL);
+  const sph=c=>{ const m=new THREE.Mesh(new THREE.SphereGeometry(.018,24,16),M(c,{transparent:true,opacity:.8,emissive:c,emissiveIntensity:.25})); g.add(m); return m; };
+  const P1=sph(P1_C), P2=sph(ACC_C); const pl1=label('P1','',[1.3,.5]), pl2=label('P2','acc',[-.3,.5]); P1.add(pl1); P2.add(pl2);
+  const ped=new THREE.Mesh(new THREE.CylinderGeometry(.03,.04,.38,24),M(0x9aa5b0)); ped.castShadow=true; ped.receiveShadow=true; g.add(ped);
+  const cube=new THREE.Mesh(new THREE.BoxGeometry(.04,.04,.04),M(0xd4710f,{roughness:.4})); cube.castShadow=true; g.add(cube);
+  const gbEl=barEl(''), gb=rawLabel(gbEl,[.5,1.6]); g.add(gb);
+  const fadeAll=a=>{ nodeMat.opacity=a; [toBase,cl1,cl2].forEach(l=>l.material.opacity=a); chips.children.forEach(c=>{c.material.transparent=true;c.material.opacity=a;}); };
+  const gripStep=(close)=>{ const st={ d:.6+P.GRIP_WAIT, lines:close?[63,64]:[65,66], inTry:true, printed:false,
+      cap: close?`<code>call_gripper(node, grip_close, "close")</code> 4번 장면의 흐름대로 서비스를 부르고, 집게가 큐브를 잡아요. 그 뒤 ${fmt(P.GRIP_WAIT)}초 기다려요.`
+                :`<code>call_gripper(node, grip_open, "open")</code> 이번엔 열기 서비스를 불러서 큐브를 놓아요. 큐브를 들어 올리는 코드는 없어서 제자리에서 잡았다 놓기만 해요.`,
+      once(){ cprint(close?'그리퍼 닫기 (잡기)':'그리퍼 열기'); },
+      run(p){ const t=p*this.d, k=ease(seg(t,.05,.55)); robot.grip(close?1-k:k);
+        (close?cl2:cl1).material.opacity=.5+.5*Math.sin(t*12);
+        if(t>=.55&&!this.printed){ this.printed=true; cprint(`그리퍼 ${close?'close':'open'}: success=True, msg='...'`); }
+        gb.position.copy(robot.tipV()); show(gb,t>=.6&&P.GRIP_WAIT>0&&p<1); setBar(gbEl,P.GRIP_WAIT?(t-.6)/P.GRIP_WAIT:1,`sleep ${fmt(clamp(t-.6,0,P.GRIP_WAIT))}s / ${fmt(P.GRIP_WAIT)}s`); },
+      end(){ (close?cl2:cl1).material.opacity=1; show(gb,false); } }; return st; };
+  const shutdownStep=()=>({ d:1.8, lines:[70,71], cap:'<code>finally</code> 정상 종료든 중단이든 항상 실행돼요. <code>rclpy.shutdown()</code>으로 ROS 2 통신을 정리하고 끝나요.',
+      once(){ cprint('(rclpy.shutdown)'); }, run(p){ fadeAll(1-ease(p)); show(nl,p<.5); show(cl1L,false); show(cl2L,false); show(chipL,false); show(tbl,false); } });
+  s5={ shutdownStep, interrupt(){
+    const st=S.steps[S.i]; const p0=st.d?clamp(S.t/st.d):1; const rem=(1-p0)*st.d; const wasMove=!!st.m;
+    S.steps.splice(S.i+1);
+    S.steps.push({ d:Math.max(1.6,wasMove?rem:0), lines:[68,69],
+      cap: wasMove?'<code>except KeyboardInterrupt</code> Ctrl+C로 생긴 예외를 잡아서 "중단"을 출력해요. 프로그램은 끝나지만, 컨트롤러가 이미 받은 movel은 끝까지 움직일 수 있어요.'
+                  :'<code>except KeyboardInterrupt</code> Ctrl+C로 생긴 예외를 잡아서 "중단"을 출력해요. 남은 코드는 건너뛰어요.',
+      once(){ cprint('^C'); cprint('중단'); },
+      run(p){ if(wasMove){ const t=p*this.d; st.run(clamp(p0+(rem?t/rem:1)*(1-p0))); } } });
+    S.steps.push(shutdownStep());
+    advance(); S.playing=true; ui();
+  } };
+  sections.push({ group:g, cam:[V(1.55,1.2,1.75),V(.2,.55,.02)],
+    reset(){ fadeAll(1); node.scale.setScalar(.001); toBase.visible=false; chips.visible=false; cl1.visible=cl2.visible=false; cone.visible=false; P1.visible=P2.visible=false;
+      [nl,tbl,chipL,cl1L,cl2L,modeL,posL,gb].forEach(o=>show(o,false));
+      const a=R(...HOME); ped.position.set(a.x,.19,a.z); cube.position.copy(a); P1.position.copy(a); P2.position.copy(R(...p2of())); },
+    build(){
+      const q=p2of(); const steps=[
+      { d:1.6, lines:[36,37], cap:'<code>rclpy.init</code>으로 ROS 2를 시작하고, 네임스페이스 <code>dsr01</code> 아래에 <code>move_basic</code> 노드를 만들어요.',
+        run(p){ node.scale.setScalar(Math.max(.001,ease(p))); show(nl,p>.4); } },
+      { d:1.5, lines:[38], cap:'만든 노드를 <code>DR_init</code>에 넣어요. 두산 라이브러리는 이 노드를 통해 로봇과 통신해요.',
+        run(p){ toBase.visible=true; const b=V(0,.13,0); setLine(toBase,Np,Np.clone().lerp(b,ease(p))); tbl.position.copy(Np.clone().lerp(b,.5)); show(tbl,p>.6); } },
+      { d:2.0, lines:[40,41], cap:'노드가 준비된 <b>뒤에</b> <code>DSR_ROBOT2</code>를 import해요. import되는 순간 DR_init의 노드를 쓰기 때문에, 먼저 하면 에러가 나요.',
+        run(p){ chips.visible=true; chips.children.forEach((c,i)=>c.scale.setScalar(Math.max(.001,ease(seg(p,i*.1,i*.1+.4))))); show(chipL,p>.5); } },
+      { d:1.7, lines:[43,44,45], cap:'서비스 이름이 <code>/</code>로 시작하지 않아서 노드 네임스페이스가 앞에 붙어요. 실제 이름은 <code>/dsr01/gripper/open</code>, <code>/dsr01/gripper/close</code>예요.',
+        run(p){ cl1.visible=cl2.visible=true; s5.clp=ease(p); show(cl1L,p>.6); show(cl2L,p>.6); } },
+      { d:1.6, lines:[47], cap:'<code>set_robot_mode(ROBOT_MODE_AUTONOMOUS)</code> 수동 모드에서는 프로그램의 이동 명령을 받지 않아서 자동 모드로 바꿔요.',
+        run(p){ robot.led(p>.4?'auto':'manual'); show(modeL,p>.4); } },
+      { d:1.9, lines:[49,50], cap:'<code>get_current_posx()[0]</code> 지금 끝단 위치를 읽어요. <code>[x, y, z, rx, ry, rz]</code>이고 x·y·z는 mm, 회전은 도(°)예요.',
+        once(){ cprint('현재 위치: [400.0, 0.0, 400.0, 0.0, 180.0, 0.0]'); },
+        run(p){ show(modeL,false); const t=robot.tipV(); cone.visible=p<.85; cone.position.copy(t).add(V(0,-.15,0)); cone.scale.set(1,Math.max(.01,ease(seg(p,0,.4))),1); cone.material.opacity=.22*(1-seg(p,.6,.85));
+          posL.position.copy(t).add(V(.05,.03,0)); show(posL,p>.3); } },
+      { d:1.8, lines:[52,53], cap:`<code>p1</code>은 지금 위치 그대로, <code>p2</code>는 X로 ${P.OFFSET_X}mm, Y로 ${P.OFFSET_Y}mm 옮긴 점이에요. 높이와 자세는 그대로라 수평으로만 움직여요.`,
+        run(p){ show(posL,false); P1.visible=true; P2.visible=p>.4; P1.scale.setScalar(Math.max(.001,ease(seg(p,0,.4)))); P2.scale.setScalar(Math.max(.001,ease(seg(p,.4,.8)))); } },
+      ];
+      for(let i=0;i<P.REPEAT;i++){
+        const a=moveStep(HOME,q,[56,57,58],m=>`반복 ${i+1}/${P.REPEAT}: <code>movel(p2)</code> 끝단이 P2까지 직선으로 움직이고, 도착해야 다음 줄로 넘어가요. ${moveCap(m)}`,()=>cprint(`[${i+1}/${P.REPEAT}] → P2`));
+        const b=moveStep(q,HOME,[56,59,60],m=>`반복 ${i+1}/${P.REPEAT}: <code>movel(p1)</code> 같은 직선을 따라 P1으로 돌아와요.`,()=>cprint(`[${i+1}/${P.REPEAT}] → P1`));
+        a.inTry=b.inTry=true; steps.push(a,b);
+      }
+      steps.push(gripStep(true), gripStep(false), shutdownStep());
+      return steps;
+    },
+    frame(){ if(cl1.visible){ const t=robot.tipV(), k=s5.clp??1; const a=Np.clone().add(V(.06,-.03,.02)), b=Np.clone().add(V(.06,-.06,-.02));
+      setLine(cl1,a,a.clone().lerp(t.clone().add(V(0,0,.03)),k)); setLine(cl2,b,b.clone().lerp(t.clone().add(V(0,0,-.03)),k));
+      cl1L.position.copy(a.clone().lerp(t,.45)); cl2L.position.copy(b.clone().lerp(t,.6)); } }
+  });
+}
+
+/* ---- 6. 실행 진입점 ---- */
+let route='ros2';
+{
+  const g=new THREE.Group(); scene.add(g);
+  const mainP=V(-.5,.32,.32);
+  const mainMat=M(0x3b78d4,{roughness:.35,emissive:0x3b78d4,emissiveIntensity:0});
+  const mainB=new THREE.Mesh(new THREE.BoxGeometry(.16,.1,.1),mainMat); mainB.position.copy(mainP); mainB.castShadow=true; g.add(mainB);
+  const ml=label('<code>main()</code>','acc',[.5,1.3]); mainB.add(ml);
+  const sign=(pos,text)=>{ const s=new THREE.Group(); s.position.copy(pos); g.add(s);
+    const post=new THREE.Mesh(new THREE.CylinderGeometry(.008,.008,.26,12),M(0x7f8a96)); post.position.y=.13; s.add(post);
+    const board=new THREE.Mesh(new THREE.BoxGeometry(.2,.06,.01),M(0x2a3139)); board.position.y=.26; s.add(board);
+    const l=label(`<code>${text}</code>`,'',[.5,1.25]); l.position.y=.29; s.add(l); return s; };
+  const sA=V(-1.12,0,1.05), sB=V(.7,0,1.12);
+  sign(sA,'python3 move_basic.py'); sign(sB,'ros2 run robot_control move_basic');
+  const gateP=V(-.92,.12,.62), entryP=V(.12,.12,.78);
+  const curveA=new THREE.CatmullRomCurve3([sA.clone().add(V(0,.03,0)),V(-1.05,.05,.85),gateP,V(-.72,.22,.44),mainP]);
+  const curveB=new THREE.CatmullRomCurve3([sB.clone().add(V(0,.03,0)),V(.45,.05,.95),entryP,V(-.2,.24,.5),mainP]);
+  const tubeA=new THREE.Mesh(new THREE.TubeGeometry(curveA,90,.006,8),M(0x8893a0,{transparent:true,opacity:.7})); g.add(tubeA);
+  const tubeB=new THREE.Mesh(new THREE.TubeGeometry(curveB,90,.006,8),M(0x8893a0,{transparent:true,opacity:.7})); g.add(tubeB);
+  const gateMat=M(0x8b9aab,{emissive:0x2f9a55,emissiveIntensity:0});
+  const gate=new THREE.Mesh(new THREE.TorusGeometry(.07,.012,10,40),gateMat); gate.position.copy(gateP); gate.lookAt(V(-.85,.17,.5)); g.add(gate);
+  const gl=label('<code>if __name__ == "__main__":</code>','',[1.05,.5]); gl.position.copy(gateP); g.add(gl);
+  const entMat=M(0xd4710f,{emissive:0xd4710f,emissiveIntensity:0});
+  const ent=new THREE.Mesh(new THREE.BoxGeometry(.13,.07,.07),entMat); ent.position.copy(entryP); ent.castShadow=true; g.add(ent);
+  const el=label('<code>setup.py</code> entry_points<small><code>move_basic = robot_control.move_basic:main</code></small>','',[-.05,.5]); el.position.copy(entryP).add(V(.08,0,0)); g.add(el);
+  const ball=new THREE.Mesh(new THREE.SphereGeometry(.024,20,14),M(0xffffff,{emissive:0xffc070,emissiveIntensity:1})); g.add(ball);
+  const toRobot=line([V(0,0,0),V(0,0,0)],0x3b78d4,true); g.add(toRobot);
+  const skip=label('이 길에서는 74–75줄을 거치지 않아요','plain',[.5,0]); skip.position.copy(gateP).add(V(0,.1,0)); g.add(skip);
+  sections.push({ group:g, cam:[V(-.15,1.45,2.55),V(-.2,.32,.45)],
+    reset(){ ball.visible=false; mainMat.emissiveIntensity=0; gateMat.emissiveIntensity=0; entMat.emissiveIntensity=0; toRobot.visible=false; show(skip,false);
+      tubeA.material.opacity=route==='py'?.9:.25; tubeB.material.opacity=route==='ros2'?.9:.25; robot.led('auto'); },
+    build(){
+      const q=p2of(); const py=route==='py';
+      const ballOn=(curve,a,b)=>p=>{ ball.visible=true; ball.position.copy(curve.getPointAt(lerp(a,b,ease(p)))); };
+      const s1=py
+        ? { d:2.4, lines:[74], cap:'<code>python3 move_basic.py</code>로 직접 실행하면 <code>__name__</code>이 <code>"__main__"</code>이 돼요. 그래서 이 if 관문을 통과해요.',
+            run(p){ ballOn(curveA,0,.42)(p); gateMat.emissiveIntensity=p>.85?.8:0; } }
+        : { d:2.4, lines:[], cap:'<code>ros2 run robot_control move_basic</code>은 <code>setup.py</code>의 entry point를 찾아가요. <code>robot_control.move_basic</code>의 <code>main</code>을 가리키고 있어요.',
+            run(p){ ballOn(curveB,0,.45)(p); entMat.emissiveIntensity=p>.85?.6:0; } };
+      const s2=py
+        ? { d:1.6, lines:[75], cap:'조건이 참이라 75줄 <code>main()</code>이 실행돼요.', run(p){ ballOn(curveA,.42,1)(p); mainMat.emissiveIntensity=p>.9?.5:0; } }
+        : { d:1.8, lines:[], cap:'entry point가 <code>main()</code>을 바로 불러요. 이때 모듈 이름은 <code>__main__</code>이 아니라서 74–75줄은 실행되지 않아요.',
+            run(p){ ballOn(curveB,.45,1)(p); mainMat.emissiveIntensity=p>.9?.5:0; show(skip,p>.4); } };
+      const go={ d:1.0, lines:py?[75]:[], cap:'어느 길로 들어와도 같은 <code>main()</code>이 실행되고, 5번 장면의 동작이 시작돼요. 여기서는 왕복 1회만 보여 줘요.',
+        run(p){ ball.visible=false; toRobot.visible=true; const b=V(0,.13,0); setLine(toRobot,mainP,mainP.clone().lerp(b,ease(p))); } };
+      const m1=moveStep(HOME,q,go.lines,()=>'P1 → P2', ()=>{}); m1.cap='<code>movel(p2)</code> 왕복 1회 중 P2로 가는 중이에요.';
+      const m2=moveStep(q,HOME,go.lines,()=>'P2 → P1', ()=>{}); m2.cap='<code>movel(p1)</code> P1으로 돌아왔어요. 실제 실행에서는 REPEAT 횟수만큼 반복하고 그리퍼 동작까지 이어져요.';
+      return [s1,s2,go,m1,m2];
+    }
+  });
+}
+
+/* ================= 재생 엔진 ================= */
+const S={sec:0,steps:[],i:0,t:0,playing:false,done:false,speed:1};
+const chapters=[...document.querySelectorAll('.chapter')];
+let tween=null;
+function flyTo([pos,target],instant){
+  const fac=camera.aspect<1?1.45:camera.aspect<1.25?1.18:1;
+  const p=target.clone().add(pos.clone().sub(target).multiplyScalar(fac));
+  if(instant||REDUCE){ camera.position.copy(p); controls.target.copy(target); tween=null; return; }
+  tween={k:0,p0:camera.position.clone(),t0:controls.target.clone(),p1:p,t1:target.clone()};
+}
+controls.addEventListener('start',()=>{ tween=null; });
+function highlight(lines){
+  document.querySelectorAll('.ln.hl').forEach(e=>e.classList.remove('hl'));
+  const ch=chapters[S.sec]; (lines||[]).forEach(n=>ch.querySelector(`.ln[data-line="${n}"]`)?.classList.add('hl'));
+}
+function startStep(){
+  const st=S.steps[S.i]; st.once&&st.once(); st.run&&st.run(0,0);
+  highlight(st.lines); $('#capText').innerHTML=st.cap; $('#capStep').textContent=`${S.sec+1}-${S.i+1} / ${S.steps.length}`; ui();
+}
+function advance(){
+  const st=S.steps[S.i]; st.end&&st.end();
+  if(S.i<S.steps.length-1){ S.i++; S.t=0; startStep(); } else { S.done=true; S.playing=false; ui(); }
+}
+function enter(k,{auto=!REDUCE,instant=false}={}){
+  S.sec=k; sections.forEach((s,i)=>s.group.visible=i===k);
+  robot.reset(); sections[k].reset(); S.steps=sections[k].build(); S.i=0; S.t=0; S.done=false; S.playing=auto;
+  conEl.hidden=k!==4; $('#graphBox').hidden=![2,4,5].includes(k); cclear(); graphClear();
+  $('#bCtrlC').hidden=k!==4;
+  flyTo(sections[k].cam,instant);
+  chapters.forEach((c,i)=>c.classList.toggle('active',i===k));
+  document.querySelectorAll('[data-nav]').forEach(b=>b.setAttribute('aria-current',String(+b.dataset.nav===k)));
+  startStep(); requestAnimationFrame(drawGraph);
+}
+function tick(dt){
+  if(!S.playing||S.done) return;
+  const st=S.steps[S.i]; S.t+=dt*S.speed; const p=st.d>0?clamp(S.t/st.d):1;
+  st.run&&st.run(p,S.t); if(p>=1) advance();
+}
+function stepOnce(){ if(S.done) return; S.playing=false; const st=S.steps[S.i]; st.run&&st.run(1,st.d); advance(); ui(); }
+function ui(){
+  $('#bPlay').textContent=S.done?'↻ 다시 재생':S.playing?'❚❚ 일시정지':'▶ 재생';
+  $('#bStep').disabled=S.done;
+  const st=S.steps[S.i]; $('#bCtrlC').disabled=!(S.sec===4&&!S.done&&st&&st.inTry);
+}
+$('#bPlay').onclick=()=>{ if(S.done) enter(S.sec,{auto:true}); else { S.playing=!S.playing; ui(); } };
+$('#bRestart').onclick=()=>enter(S.sec,{auto:!REDUCE});
+$('#bStep').onclick=stepOnce;
+$('#bCtrlC').onclick=()=>{ if(S.sec===4&&S.steps[S.i]?.inTry) s5.interrupt(); };
+document.querySelectorAll('[data-speed]').forEach(b=>b.onclick=()=>{ S.speed=+b.dataset.speed; document.querySelectorAll('[data-speed]').forEach(x=>x.setAttribute('aria-pressed',String(x===b))); });
+document.querySelectorAll('[data-play]').forEach(b=>b.onclick=()=>enter(+b.dataset.play,{auto:true}));
+document.querySelectorAll('[data-nav]').forEach(b=>b.onclick=()=>{ const k=+b.dataset.nav; enter(k); chapters[k].scrollIntoView({behavior:REDUCE?'auto':'smooth',block:'start'}); lastScroll=k; });
+document.querySelectorAll('[data-scn]').forEach(b=>b.onclick=()=>{ scenario=b.dataset.scn; document.querySelectorAll('[data-scn]').forEach(x=>x.setAttribute('aria-pressed',String(x===b))); enter(3,{auto:true}); });
+document.querySelectorAll('[data-route]').forEach(b=>b.onclick=()=>{ route=b.dataset.route; document.querySelectorAll('[data-route]').forEach(x=>x.setAttribute('aria-pressed',String(x===b))); enter(5,{auto:true}); });
+
+/* 슬라이더 */
+const units={REPEAT:'',OFFSET_X:' mm',OFFSET_Y:' mm',VEL:' mm/s',ACC:' mm/s²',GRIP_WAIT:' s'};
+function syncSliders(){ for(const k in P){ $('#s'+k).value=P[k]; $('#o'+k).textContent=(k==='GRIP_WAIT'?fmt(P[k]):P[k])+units[k]; } }
+for(const k in P){
+  const inp=$('#s'+k);
+  inp.addEventListener('input',()=>{ P[k]=+inp.value; syncSliders(); if(S.sec===2&&!S.playing){ s3.update(); s3.p2.visible=true; } drawGraph(); });
+  inp.addEventListener('change',()=>{ if(S.sec===2) enter(2,{auto:!REDUCE}); });
+}
+$('#resetParams').onclick=()=>{ Object.assign(P,DEF); syncSliders(); if(S.sec===2) enter(2,{auto:!REDUCE}); };
+syncSliders();
+
+/* 스크롤에 따라 장면 바꾸기 */
+let lastScroll=0, scrollQueued=false;
+function onScroll(){ scrollQueued=false;
+  const line=innerHeight*(innerWidth<=900?.72:.4); let k=0;
+  chapters.forEach((c,i)=>{ if(c.getBoundingClientRect().top<line) k=i; });
+  if(k!==lastScroll){ lastScroll=k; if(k!==S.sec) enter(k); }
+}
+addEventListener('scroll',()=>{ if(!scrollQueued){ scrollQueued=true; requestAnimationFrame(onScroll); } },{passive:true});
+
+/* 크기와 테마 */
+function resize(){ const w=vp.clientWidth, h=vp.clientHeight; if(!w||!h) return; renderer.setSize(w,h); lr.setSize(w,h); camera.aspect=w/h; camera.updateProjectionMatrix(); drawGraph(); }
+new ResizeObserver(resize).observe(vp); resize();
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change',applyTheme);
+new MutationObserver(applyTheme).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+applyTheme();
+
+/* 루프 */
+const clock=new THREE.Clock(); let time=0;
+function loop(){
+  requestAnimationFrame(loop);
+  const dt=Math.min(clock.getDelta(),.05); time+=dt;
+  tick(dt); sections[S.sec].frame&&sections[S.sec].frame(time,dt);
+  if(tween){ tween.k=Math.min(1,tween.k+dt/1.1); const e=ease(tween.k); camera.position.lerpVectors(tween.p0,tween.p1,e); controls.target.lerpVectors(tween.t0,tween.t1,e); if(tween.k>=1) tween=null; }
+  controls.update(); syncLabels(); renderer.render(scene,camera); lr.render(scene,camera);
+}
+enter(0,{instant:true});
+loop();
+</script>
+
+</body>
+</html>

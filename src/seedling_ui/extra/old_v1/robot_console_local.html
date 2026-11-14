@@ -1,0 +1,952 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>묘목 식재·열매 수확 로봇 관제</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/roslib@1.4.1/build/roslib.min.js"></script>
+<style>
+:root{
+  --bg:#E4EAE1; --surface:#F7F9F4; --surface2:#EDF2EA; --map:#F0F4EC;
+  --ink:#1D2A20; --ink2:#566559; --line:#C6D1C2;
+  --soil:#7A5A40; --soilbg:#E8DCCD; --soildot:#B89A7C;
+  --leaf:#3B7A4A; --leafbg:#DAEADB; --stem:#2F6A3D;
+  --ripe:#C8413A; --unripe:#74A048; --branch:#8A6440;
+  --amber:#A8730F; --amberbg:#F6E8C8;
+  --steel:#5A6C7E; --steel2:#8FA0B2;
+  --danger:#B3261E; --dangerbg:#F7DEDB; --onaccent:#FFFFFF;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#111712; --surface:#192119; --surface2:#202A21; --map:#151C16;
+    --ink:#E2EAE0; --ink2:#9CAA9E; --line:#334035;
+    --soil:#C49A73; --soilbg:#2A231C; --soildot:#7C6650;
+    --leaf:#6CB27D; --leafbg:#1D3223; --stem:#5BA06C;
+    --ripe:#E3645B; --unripe:#9CC669; --branch:#9C7652;
+    --amber:#E3AE45; --amberbg:#3A2E15;
+    --steel:#9DB0C3; --steel2:#5F7184;
+    --danger:#EE5E54; --dangerbg:#3D1D1A; --onaccent:#FFFFFF;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#111712; --surface:#192119; --surface2:#202A21; --map:#151C16;
+  --ink:#E2EAE0; --ink2:#9CAA9E; --line:#334035;
+  --soil:#C49A73; --soilbg:#2A231C; --soildot:#7C6650;
+  --leaf:#6CB27D; --leafbg:#1D3223; --stem:#5BA06C;
+  --ripe:#E3645B; --unripe:#9CC669; --branch:#9C7652;
+  --amber:#E3AE45; --amberbg:#3A2E15;
+  --steel:#9DB0C3; --steel2:#5F7184;
+  --danger:#EE5E54; --dangerbg:#3D1D1A; --onaccent:#FFFFFF;
+  color-scheme: dark;
+}
+*,*::before,*::after{box-sizing:border-box}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:"IBM Plex Sans KR",system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  font-size:15px;line-height:1.55;font-variant-numeric:tabular-nums}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--surface)}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--leaf);outline-offset:2px}
+
+/* 상단 바 */
+header{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--surface);border-bottom:1px solid var(--line);
+  display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px;padding:12px clamp(14px,3vw,28px)}
+.brand{display:flex;flex-direction:column;margin-right:auto;min-width:0}
+.brand h1{margin:0;font-size:1.25rem;font-weight:700;letter-spacing:-.01em}
+.brand span{color:var(--ink2);font-size:.85rem}
+.state{display:flex;align-items:center;gap:8px;font-weight:600;padding:6px 12px;border-radius:999px;background:var(--surface2);border:1px solid var(--line)}
+.state i{width:10px;height:10px;border-radius:50%;background:var(--leaf);display:block}
+.state[data-s="busy"] i{background:var(--amber);animation:blink 1s infinite}
+.state[data-s="paused"] i{background:var(--amber)}
+.state[data-s="estop"]{background:var(--dangerbg);border-color:var(--danger);color:var(--danger)}
+.state[data-s="estop"] i{background:var(--danger)}
+@keyframes blink{50%{opacity:.25}}
+.estop{border:none;background:var(--danger);color:var(--onaccent);font-weight:700;font-size:1.05rem;
+  padding:12px 22px;border-radius:14px;box-shadow:0 0 0 4px var(--dangerbg);min-width:140px}
+.estop:hover{filter:brightness(1.08)}
+.estop.reset{background:var(--surface2);color:var(--danger);box-shadow:inset 0 0 0 2px var(--danger)}
+
+/* 본문 그리드 */
+main{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(300px,1fr);gap:18px;padding:18px clamp(14px,3vw,28px) 28px;max-width:1440px;margin:0 auto}
+@media (max-width:980px){main{grid-template-columns:minmax(0,1fr)}}
+.col{display:flex;flex-direction:column;gap:18px;min-width:0}
+section.panel{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px 18px}
+.panel h2{margin:0 0 10px;font-size:1.02rem;font-weight:700}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.muted{color:var(--ink2);font-size:.86rem}
+
+/* 작업대 지도 */
+.maphead{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:baseline;margin-bottom:10px}
+.maphead h2{margin:0;margin-right:auto}
+.stat{font-size:.9rem;color:var(--ink2)}
+.stat b{color:var(--ink);font-size:1.05rem}
+.mapwrap{background:var(--map);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+svg#map{display:block;width:100%;height:auto;user-select:none}
+.zoneA{fill:var(--soilbg);stroke:var(--soil);stroke-width:2}
+.zoneB{fill:var(--leafbg);stroke:var(--leaf);stroke-width:2}
+.zonelabel{fill:var(--ink);font-size:17px;font-weight:600}
+.small{fill:var(--ink2);font-size:13px}
+.hole{fill:none;stroke:var(--soildot);stroke-width:2;stroke-dasharray:6 5}
+.holefill{fill:var(--soil);opacity:.14}
+.stem{stroke:var(--stem);stroke-width:4;stroke-linecap:round;fill:none}
+.leafp{fill:var(--leaf)}
+.branch{stroke:var(--branch);stroke-width:9;stroke-linecap:round;fill:none}
+.berry{stroke:#fff;stroke-width:3;cursor:pointer}
+.berry.r{fill:var(--ripe)} .berry.u{fill:var(--unripe)}
+.selring{fill:none;stroke:var(--amber);stroke-width:4;stroke-dasharray:5 4}
+.tray{fill:var(--surface);stroke:var(--line);stroke-width:2}
+.box{fill:none;stroke-width:2.5}
+.box.ok{stroke:var(--leaf)} .box.empty{stroke:var(--amber)} .box.block{stroke:var(--danger)}
+.boxtag{font-size:12.5px;font-weight:600}
+.tag-ok{fill:var(--leaf)} .tag-empty{fill:var(--amber)} .tag-block{fill:var(--danger)}
+.tagbg{fill:var(--surface);opacity:.92}
+.targetring{fill:none;stroke:var(--amber);stroke-width:3}
+.sweep{stroke:var(--amber);stroke-width:3;opacity:.85}
+.sweepfill{fill:var(--amber);opacity:.1}
+.armlink{stroke:var(--steel);stroke-linecap:round}
+.armjoint{fill:var(--surface);stroke:var(--steel);stroke-width:4}
+.base{fill:var(--surface2);stroke:var(--steel);stroke-width:5}
+.basein{fill:var(--steel2)}
+.grip{stroke:var(--steel);stroke-width:5;stroke-linecap:round}
+.zshadow{fill:none;stroke:var(--steel);stroke-width:1.5;stroke-dasharray:3 4;opacity:.7}
+.maplegend{display:flex;flex-wrap:wrap;gap:6px 16px;padding:8px 2px 0}
+.maplegend span{display:flex;align-items:center;gap:6px;font-size:.84rem;color:var(--ink2)}
+.maplegend i{width:12px;height:12px;border-radius:3px;display:block;border:2.5px solid}
+
+/* 탭 */
+.tabs{display:flex;gap:6px;overflow-x:auto;border-bottom:1px solid var(--line);margin:-4px -4px 14px;padding:0 4px}
+.tab{background:none;border:none;padding:10px 12px 11px;border-bottom:3px solid transparent;font-weight:600;color:var(--ink2);white-space:nowrap;display:flex;gap:7px;align-items:center}
+.tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--leaf)}
+.tab small{font-size:.72rem;font-weight:600;padding:1px 7px;border-radius:999px;background:var(--surface2);border:1px solid var(--line)}
+.tab small.top{background:var(--leafbg);border-color:var(--leaf);color:var(--leaf)}
+[role="tabpanel"][hidden]{display:none}
+.field{display:flex;flex-direction:column;gap:4px;font-size:.86rem;color:var(--ink2)}
+.field input,.field select{background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:8px 10px;min-width:120px;color:var(--ink)}
+.btn{border:1px solid var(--line);background:var(--surface2);border-radius:10px;padding:9px 14px;font-weight:600}
+.btn:hover{border-color:var(--ink2)}
+.btn.primary{background:var(--leaf);border-color:var(--leaf);color:var(--onaccent)}
+.btn.primary:hover{filter:brightness(1.07)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.steps{list-style:none;margin:14px 0 0;padding:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+@media (max-width:640px){.steps{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.steps li{border:1px solid var(--line);border-radius:10px;padding:9px 10px;background:var(--surface2);font-size:.86rem}
+.steps li b{display:block;font-size:.92rem;color:var(--ink)}
+.steps li span{color:var(--ink2)}
+.steps li[data-s="run"]{border-color:var(--amber);background:var(--amberbg)}
+.steps li[data-s="done"]{border-color:var(--leaf);background:var(--leafbg)}
+.steps li[data-s="fail"]{border-color:var(--danger);background:var(--dangerbg)}
+
+/* 음성 */
+.voicebar{display:flex;gap:8px;align-items:stretch}
+.mic{flex:none;width:52px;border-radius:12px;border:1px solid var(--line);background:var(--surface2);display:grid;place-items:center}
+.mic.on{background:var(--danger);border-color:var(--danger);color:var(--onaccent)}
+.voicebar input{flex:1;min-width:0;background:var(--surface2);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.chip{border:1px dashed var(--line);background:none;border-radius:999px;padding:5px 11px;font-size:.86rem;color:var(--ink2)}
+.chip:hover{color:var(--ink);border-color:var(--ink2)}
+.chat{margin-top:12px;display:flex;flex-direction:column;gap:8px;max-height:220px;overflow-y:auto}
+.bubble{max-width:85%;padding:8px 12px;border-radius:12px;font-size:.92rem}
+.bubble.me{align-self:flex-end;background:var(--leafbg);border:1px solid var(--leaf)}
+.bubble.bot{align-self:flex-start;background:var(--surface2);border:1px solid var(--line)}
+.plan{margin-top:12px;border:2px solid var(--amber);background:var(--amberbg);border-radius:12px;padding:12px 14px}
+.plan h3{margin:0 0 4px;font-size:.98rem}
+.plan p{margin:0 0 10px;font-size:.9rem}
+
+/* 상태 패널 */
+.conn .badge{font-size:.8rem;font-weight:700;padding:3px 9px;border-radius:999px;background:var(--surface2);border:1px solid var(--line)}
+.conn .badge.ros{background:var(--leafbg);border-color:var(--leaf);color:var(--leaf)}
+.conn input{flex:1;min-width:160px;background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+.joints{display:grid;grid-template-columns:auto 1fr auto;gap:6px 10px;align-items:center;font-size:.9rem}
+.bar{height:8px;background:var(--surface2);border:1px solid var(--line);border-radius:99px;position:relative;overflow:hidden}
+.bar::after{content:"";position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--line)}
+.bar i{position:absolute;top:0;bottom:0;background:var(--steel);border-radius:99px}
+.jv{text-align:right;min-width:62px}
+.tcp{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
+.tcp div{background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:6px 10px;font-size:.82rem;color:var(--ink2)}
+.tcp b{display:block;font-size:1.02rem;color:var(--ink)}
+.ctrl{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.speed{display:flex;align-items:center;gap:10px;margin-top:12px;font-size:.9rem}
+.speed input{flex:1;accent-color:var(--leaf)}
+.log{list-style:none;margin:0;padding:0;max-height:260px;overflow-y:auto;font-size:.86rem;display:flex;flex-direction:column;gap:4px}
+.log li{display:grid;grid-template-columns:auto 1fr;gap:10px;padding:5px 2px;border-bottom:1px solid var(--line)}
+.log time{color:var(--ink2)}
+.log li.warn span{color:var(--amber)} .log li.danger span{color:var(--danger);font-weight:600} .log li.ok span{color:var(--leaf)}
+.note{font-size:.82rem;color:var(--ink2);margin:10px 0 0}
+@media (prefers-reduced-motion:reduce){.state[data-s="busy"] i{animation:none}}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <h1>묘목 식재·열매 수확 로봇 관제</h1>
+    <span>로봇프로젝트 5팀 · 두산 협동로봇 1대로 두 작업 수행</span>
+  </div>
+  <div class="state" id="state" data-s="idle" role="status" aria-live="polite"><i></i><span id="stateText">대기 중</span></div>
+  <button class="estop" id="estop" title="Esc 키로도 누를 수 있어요">비상정지</button>
+</header>
+
+<main>
+  <div class="col">
+    <section class="panel" aria-labelledby="mapTitle">
+      <div class="maphead">
+        <h2 id="mapTitle">통합 작업대</h2>
+        <span class="stat">식재 <b id="stPlanted">2</b>/6칸</span>
+        <span class="stat">공급대 묘목 <b id="stSupply">6</b>개</span>
+        <span class="stat">수확 <b id="stHarvest">0</b>개</span>
+        <button class="btn" id="resetBtn">작업대 초기화</button>
+      </div>
+      <div class="mapwrap">
+        <svg id="map" viewBox="0 0 800 460" role="img" aria-label="작업대 위에서 본 모습: 왼쪽 자동 식재 구역, 오른쪽 모형 열매 수확 구역, 아래 가운데 로봇팔">
+          <rect class="zoneA" x="30" y="50" width="320" height="262" rx="14"/>
+          <text class="zonelabel" x="190" y="38" text-anchor="middle">A. 자동 식재 구역</text>
+          <rect class="zoneB" x="450" y="50" width="320" height="262" rx="14"/>
+          <text class="zonelabel" x="610" y="38" text-anchor="middle">B. 모형 열매 수확 구역</text>
+          <g id="tree"></g>
+          <rect class="tray" x="40" y="348" width="180" height="78" rx="10"/>
+          <text class="small" x="130" y="446" text-anchor="middle">묘목 공급대</text>
+          <rect class="tray" x="580" y="348" width="180" height="78" rx="10"/>
+          <text class="small" x="670" y="446" text-anchor="middle">수확함</text>
+          <g id="dyn"></g>
+        </svg>
+      </div>
+      <div class="maplegend" aria-hidden="true">
+        <span><i style="border-color:var(--leaf)"></i>묘목 감지</span>
+        <span><i style="border-color:var(--amber)"></i>빈 칸(식재 가능)</span>
+        <span><i style="border-color:var(--danger)"></i>간격 부족</span>
+        <span><i style="background:var(--ripe);border-color:var(--ripe);border-radius:50%"></i>익은 열매</span>
+        <span><i style="background:var(--unripe);border-color:var(--unripe);border-radius:50%"></i>덜 익은 열매</span>
+      </div>
+    </section>
+
+    <section class="panel" aria-label="작업">
+      <div class="tabs" role="tablist">
+        <button class="tab" role="tab" aria-selected="true" aria-controls="p1" id="t1">1단계 자동 식재 <small class="top">최우선</small></button>
+        <button class="tab" role="tab" aria-selected="false" aria-controls="p2" id="t2">2단계 음성 명령 <small>필수</small></button>
+        <button class="tab" role="tab" aria-selected="false" aria-controls="p3" id="t3">3단계 성숙도 분류 <small>권장</small></button>
+        <button class="tab" role="tab" aria-selected="false" aria-controls="p4" id="t4">4단계 열매 수확 <small>도전</small></button>
+      </div>
+
+      <div role="tabpanel" id="p1" aria-labelledby="t1">
+        <div class="row" style="align-items:flex-end;gap:12px">
+          <label class="field">심을 개수
+            <select id="plantCount">
+              <option value="0">빈 칸 모두</option>
+              <option value="1">1그루</option><option value="2">2그루</option><option value="3">3그루</option><option value="4">4그루</option>
+            </select>
+          </label>
+          <label class="field">최소 간격(mm)
+            <input id="spacing" type="number" min="100" max="300" step="10" value="150">
+          </label>
+          <button class="btn" id="scanBtn">빈 칸 판별</button>
+          <button class="btn primary" id="plantBtn">식재 시작</button>
+        </div>
+        <ol class="steps" id="plantSteps">
+          <li data-s="wait"><b>빈 영역 판별</b><span>카메라로 칸 확인</span></li>
+          <li data-s="wait"><b>간격 계산</b><span>심을 칸 고르기</span></li>
+          <li data-s="wait"><b>묘목 식재</b><span>집어서 옮겨 심기</span></li>
+          <li data-s="wait"><b>결과 확인</b><span>다시 촬영해 검증</span></li>
+        </ol>
+        <p class="note">간격을 160mm보다 크게 잡으면 옆 칸과 너무 가까운 칸은 “간격 부족”으로 건너뜁니다. (칸 사이 거리는 약 160mm로 가정)</p>
+      </div>
+
+      <div role="tabpanel" id="p2" aria-labelledby="t2" hidden>
+        <div class="voicebar">
+          <button class="mic" id="micBtn" aria-label="음성으로 말하기">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+          </button>
+          <input id="voiceText" placeholder="명령을 말하거나 입력하세요" aria-label="명령 입력">
+          <button class="btn primary" id="sendBtn">보내기</button>
+        </div>
+        <div class="chips" id="chips">
+          <button class="chip">묘목 두 그루 심어줘</button>
+          <button class="chip">현재 상태 알려줘</button>
+          <button class="chip">열매 익었는지 확인해줘</button>
+          <button class="chip">익은 열매 수확해줘</button>
+          <button class="chip">홈 위치로 돌아가</button>
+          <button class="chip">잠깐 멈춰</button>
+        </div>
+        <div id="planBox"></div>
+        <div class="chat" id="chat" aria-live="polite"></div>
+        <p class="note">작업 명령은 반드시 “승인” 후에만 실행됩니다. “멈춰”는 승인 없이 바로 일시정지합니다. 로봇에 연결하면 마이크 버튼은 녹음 버튼이 됩니다. 한 번 눌러 말하고 다시 누르면 Whisper가 글자로 바꾸고 Claude가 해석합니다. 시뮬레이션 모드의 해석은 간단한 규칙으로 흉내 낸 것입니다.</p>
+      </div>
+
+      <div role="tabpanel" id="p3" aria-labelledby="t3" hidden>
+        <div class="row">
+          <button class="btn primary" id="classifyBtn">성숙도 분류</button>
+          <span class="muted" id="classifyResult">아직 분류하지 않았어요.</span>
+        </div>
+        <p class="note">고정된 모형 열매를 색으로 빨강(익음)과 초록(덜 익음)으로 나눕니다. 분류가 끝나면 지도에 결과와 확신도가 표시됩니다.</p>
+      </div>
+
+      <div role="tabpanel" id="p4" aria-labelledby="t4" hidden>
+        <div class="row">
+          <button class="btn" id="harvestSelBtn">선택한 열매 수확</button>
+          <button class="btn primary" id="harvestAllBtn">익은 열매 모두 수확</button>
+          <span class="muted" id="selInfo">선택 0개</span>
+        </div>
+        <p class="note">지도에서 익은 열매를 눌러 고를 수 있어요. 덜 익은 열매는 고를 수 없습니다. 분류가 안 되어 있으면 먼저 성숙도 분류를 실행합니다.</p>
+      </div>
+    </section>
+  </div>
+
+  <div class="col">
+    <section class="panel conn" aria-labelledby="connTitle">
+      <div class="row" style="justify-content:space-between;margin-bottom:10px">
+        <h2 id="connTitle" style="margin:0">로봇 연결</h2>
+        <span class="badge" id="modeBadge">시뮬레이션</span>
+      </div>
+      <div class="row">
+        <input id="rosUrl" value="ws://localhost:9090" aria-label="rosbridge 주소">
+        <button class="btn" id="connBtn">연결</button>
+      </div>
+      <p class="note">ROS 2 PC에서 rosbridge를 켠 뒤 연결하세요. 연결 전에는 시뮬레이션으로 동작합니다.</p>
+    </section>
+
+    <section class="panel" aria-labelledby="armTitle">
+      <div class="row" style="justify-content:space-between;margin-bottom:10px">
+        <h2 id="armTitle" style="margin:0">로봇팔 상태</h2>
+        <span class="muted" id="jointSrc">미리보기 값</span>
+      </div>
+      <div class="joints" id="joints"></div>
+      <div class="tcp">
+        <div>X<b id="tx">0</b>mm</div>
+        <div>Y<b id="ty">0</b>mm</div>
+        <div>Z<b id="tz">0</b>mm</div>
+      </div>
+      <div class="speed">
+        <label for="speed">속도</label>
+        <input id="speed" type="range" min="10" max="100" step="10" value="60">
+        <b id="speedVal">60%</b>
+      </div>
+    </section>
+
+    <section class="panel" aria-labelledby="manTitle">
+      <h2 id="manTitle">수동 조작</h2>
+      <div class="ctrl">
+        <button class="btn" id="homeBtn">홈 위치로</button>
+        <button class="btn" id="pauseBtn">일시정지</button>
+        <button class="btn" id="gOpenBtn">그리퍼 열기</button>
+        <button class="btn" id="gCloseBtn">그리퍼 닫기</button>
+      </div>
+      <p class="note">그리퍼 <b id="gripState">열림</b>. 화면의 비상정지는 보조 수단이에요. 실제 로봇 옆 비상정지 버튼은 항상 손이 닿는 곳에 두세요.</p>
+    </section>
+
+    <section class="panel" aria-labelledby="logTitle">
+      <h2 id="logTitle">작업 기록</h2>
+      <ol class="log" id="log" aria-live="polite"></ol>
+    </section>
+  </div>
+</main>
+
+<script>
+/* ===== 설정: 팀 ROS 노드에 맞게 바꾸세요 ===== */
+const CONFIG = {
+  topics: {
+    command: { name: '/ui/command', type: 'std_msgs/String' },        // 화면 → 로봇 (JSON 문자열)
+    status:  { name: '/ui/status',  type: 'std_msgs/String' },        // 로봇 → 화면 (JSON 문자열)
+    joints:  { name: '/dsr01/joint_states', type: 'sensor_msgs/JointState' } // 실제 관절 값
+  }
+};
+
+const $ = s => document.querySelector(s);
+const BASE = { x: 400, y: 410 }, HOME = { x: 400, y: 240 };
+const L1 = 230, L2 = 210, PX2MM = 1.6;
+const SUPPLY = { x: 130, y: 387 }, BASKET = { x: 670, y: 387 };
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const initCells = () => [
+  { x: 95, y: 130, s: 'planted' }, { x: 195, y: 130, s: 'empty' }, { x: 295, y: 130, s: 'empty' },
+  { x: 95, y: 235, s: 'empty' },   { x: 195, y: 235, s: 'planted' }, { x: 295, y: 235, s: 'empty' }
+];
+const initBerries = () => [
+  { x: 505, y: 112, ripe: true }, { x: 600, y: 118, ripe: false }, { x: 690, y: 132, ripe: false },
+  { x: 500, y: 208, ripe: true }, { x: 672, y: 236, ripe: true }
+].map((b, i) => ({ ...b, id: i, classified: false, picked: false, sel: false, conf: 0 }));
+
+const S = {
+  mode: 'sim', busy: false, paused: false, estop: false, speed: 60,
+  grip: 'open', carry: null, tip: { ...HOME }, z: 300,
+  cells: initCells(), scanned: false, supply: 6,
+  berries: initBerries(), harvested: 0, sweep: null,
+  realJoints: null, pendingPlan: null
+};
+
+/* ===== 기록 ===== */
+function log(text, level = 'info') {
+  const li = document.createElement('li');
+  li.className = level;
+  const d = new Date(), pad = n => String(n).padStart(2, '0');
+  const t = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  li.innerHTML = `<time>${t}</time><span></span>`;
+  li.querySelector('span').textContent = text;
+  $('#log').prepend(li);
+}
+
+/* ===== 역기구학(화면용 2관절 근사) ===== */
+function ik(t) {
+  const dx = t.x - BASE.x, dy = t.y - BASE.y;
+  let d = Math.hypot(dx, dy);
+  d = Math.max(Math.abs(L1 - L2) + 1, Math.min(L1 + L2 - 1, d));
+  const a = Math.atan2(dy, dx);
+  const b = Math.acos((L1 * L1 + d * d - L2 * L2) / (2 * L1 * d));
+  const inner = Math.acos((L1 * L1 + L2 * L2 - d * d) / (2 * L1 * L2));
+  // 팔꿈치는 두 해 중 위쪽(작업대 안쪽)으로 굽는 쪽을 고름
+  const e1 = { x: BASE.x + L1 * Math.cos(a + b), y: BASE.y + L1 * Math.sin(a + b) };
+  const e2 = { x: BASE.x + L1 * Math.cos(a - b), y: BASE.y + L1 * Math.sin(a - b) };
+  const up = e1.y <= e2.y, e = up ? e1 : e2;
+  const sh = up ? a + b : a - b;
+  const tip = { x: BASE.x + d * Math.cos(a), y: BASE.y + d * Math.sin(a) };
+  return { a, b: sh - a, inner, e, tip };
+}
+const deg = r => r * 180 / Math.PI;
+
+/* ===== 그리기 ===== */
+function sprout(x, y, sc = 1) {
+  return `<g transform="translate(${x},${y}) scale(${sc})">
+    <path class="stem" d="M0 20 L0 -2"/>
+    <path class="leafp" d="M0 4 C-8 -16 -30 -12 -34 -5 C-24 6 -8 8 0 4Z"/>
+    <path class="leafp" d="M0 0 C8 -20 30 -18 34 -11 C26 1 8 4 0 0Z"/></g>`;
+}
+function drawTree() {
+  let s = `<path class="branch" d="M608 296 L608 108"/>`;
+  S.berries.forEach(b => {
+    const jy = Math.max(120, Math.min(280, b.y + 22));
+    s += `<path class="branch" style="stroke-width:7" d="M608 ${jy} L${b.x} ${b.y}"/>`;
+  });
+  $('#tree').innerHTML = s;
+}
+function tag(x, y, text, cls) {
+  const w = text.length * 12 + 12;
+  return `<rect class="tagbg" x="${x - w / 2}" y="${y - 14}" width="${w}" height="19" rx="5"/>
+          <text class="boxtag ${cls}" x="${x}" y="${y}" text-anchor="middle">${text}</text>`;
+}
+function render() {
+  let s = '';
+  // 식재 칸
+  S.cells.forEach(c => {
+    s += `<circle class="holefill" cx="${c.x}" cy="${c.y}" r="38"/><circle class="hole" cx="${c.x}" cy="${c.y}" r="38"/>`;
+    if (c.s === 'planted') s += sprout(c.x, c.y);
+    if (c.s === 'target') s += `<circle class="targetring" cx="${c.x}" cy="${c.y}" r="44"/>`;
+    if (S.scanned) {
+      const k = c.s === 'planted' ? 'ok' : c.s === 'block' ? 'block' : 'empty';
+      const label = c.s === 'planted' ? (c.conf ? `묘목 ${c.conf}%` : '묘목') : c.s === 'block' ? '간격 부족' : (c.conf ? `빈 칸 ${c.conf}%` : '빈 칸');
+      s += `<rect class="box ${k}" x="${c.x - 46}" y="${c.y - 46}" width="92" height="92" rx="6"/>`;
+      s += tag(c.x, c.y - 50, label, 'tag-' + k);
+    }
+  });
+  // 열매
+  S.berries.forEach(b => {
+    if (b.picked) return;
+    if (b.sel) s += `<circle class="selring" cx="${b.x}" cy="${b.y}" r="28"/>`;
+    s += `<circle class="berry ${b.ripe ? 'r' : 'u'}" data-id="${b.id}" cx="${b.x}" cy="${b.y}" r="20"><title>${b.ripe ? '빨간' : '초록'} 열매</title></circle>`;
+    if (b.classified) s += tag(b.x, b.y + 40, `${b.ripe ? '익음' : '덜 익음'} ${b.conf}%`, b.ripe ? 'tag-block' : 'tag-ok');
+  });
+  // 공급대·수확함
+  for (let i = 0; i < S.supply; i++) s += sprout(62 + i * 27, 392, 0.42);
+  for (let i = 0; i < S.harvested; i++) s += `<circle class="berry r" style="stroke-width:2;cursor:default" cx="${605 + (i % 7) * 22}" cy="${374 + Math.floor(i / 7) * 24}" r="9"/>`;
+  $('#tree').style.display = '';
+  // 스캔 표시
+  if (S.sweep) {
+    const z = S.sweep.zone === 'A' ? { x: 30 } : { x: 450 };
+    const x = z.x + 320 * S.sweep.p;
+    s += `<rect class="sweepfill" x="${z.x}" y="50" width="${x - z.x}" height="262"/><line class="sweep" x1="${x}" y1="50" x2="${x}" y2="312"/>`;
+  }
+  // 로봇팔
+  const k = ik(S.tip);
+  const zr = 8 + S.z / 22;
+  s += `<circle class="base" cx="${BASE.x}" cy="${BASE.y}" r="42"/><circle class="basein" cx="${BASE.x}" cy="${BASE.y}" r="16"/>`;
+  s += `<line class="armlink" stroke-width="26" x1="${BASE.x}" y1="${BASE.y}" x2="${k.e.x}" y2="${k.e.y}"/>`;
+  s += `<line class="armlink" stroke-width="20" x1="${k.e.x}" y1="${k.e.y}" x2="${k.tip.x}" y2="${k.tip.y}"/>`;
+  s += `<circle class="armjoint" cx="${k.e.x}" cy="${k.e.y}" r="11"/>`;
+  s += `<circle class="zshadow" cx="${k.tip.x}" cy="${k.tip.y}" r="${zr}"/>`;
+  const ang = Math.atan2(k.tip.y - k.e.y, k.tip.x - k.e.x);
+  const open = S.grip === 'open' ? 12 : 5;
+  const px = -Math.sin(ang), py = Math.cos(ang), fx = Math.cos(ang), fy = Math.sin(ang);
+  [-1, 1].forEach(sg => {
+    const ox = k.tip.x + px * open * sg, oy = k.tip.y + py * open * sg;
+    s += `<line class="grip" x1="${ox}" y1="${oy}" x2="${ox + fx * 18}" y2="${oy + fy * 18}"/>`;
+  });
+  if (S.carry === 'sprout') s += sprout(k.tip.x + fx * 14, k.tip.y + fy * 14, 0.55);
+  if (S.carry === 'berry') s += `<circle class="berry r" style="stroke-width:2" cx="${k.tip.x + fx * 14}" cy="${k.tip.y + fy * 14}" r="11"/>`;
+  $('#dyn').innerHTML = s;
+  renderReadouts(k);
+}
+function renderReadouts(k) {
+  let j;
+  if (S.realJoints) j = S.realJoints;
+  else {
+    const j1 = deg(k.a) + 90;
+    j = [j1, 90 - Math.abs(deg(k.b)) - (S.z - 300) / 12, 180 - deg(k.inner), 0, 90 - (300 - S.z) / 6, -j1];
+  }
+  $('#joints').innerHTML = j.map((v, i) => {
+    const p = Math.max(-180, Math.min(180, v)) / 360 * 100;
+    const left = p >= 0 ? 50 : 50 + p, w = Math.abs(p);
+    return `<span>J${i + 1}</span><div class="bar"><i style="left:${left}%;width:${w}%"></i></div><span class="jv">${v.toFixed(1)}°</span>`;
+  }).join('');
+  $('#tx').textContent = ((k.tip.x - BASE.x) * PX2MM).toFixed(0);
+  $('#ty').textContent = ((BASE.y - k.tip.y) * PX2MM).toFixed(0);
+  $('#tz').textContent = S.z.toFixed(0);
+  $('#gripState').textContent = S.grip === 'open' ? '열림' : '닫힘';
+  $('#stPlanted').textContent = S.cells.filter(c => c.s === 'planted').length;
+  $('#stSupply').textContent = S.supply;
+  $('#stHarvest').textContent = S.harvested;
+  $('#selInfo').textContent = `선택 ${S.berries.filter(b => b.sel && !b.picked).length}개`;
+}
+
+/* ===== 동작(일시정지·비상정지 반영) ===== */
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const ease = p => p < .5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+async function guard() {
+  if (S.estop) throw new Error('ESTOP');
+  while (S.paused) { await sleep(120); if (S.estop) throw new Error('ESTOP'); }
+}
+function tween(dur, fn) {
+  dur = reduce ? Math.min(dur, 150) : dur;
+  return new Promise((res, rej) => {
+    let t = 0, last = performance.now();
+    const f = now => {
+      if (S.estop) return rej(new Error('ESTOP'));
+      if (!S.paused) t += now - last;
+      last = now;
+      const p = Math.min(1, t / dur);
+      fn(ease(p)); render();
+      p < 1 ? requestAnimationFrame(f) : res();
+    };
+    requestAnimationFrame(f);
+  });
+}
+const pxPerSec = () => 90 + S.speed * 4.5;
+async function moveTo(x, y) {
+  await guard();
+  const f = { ...S.tip }, d = Math.hypot(x - f.x, y - f.y);
+  await tween(Math.max(250, d / pxPerSec() * 1000), p => { S.tip = { x: f.x + (x - f.x) * p, y: f.y + (y - f.y) * p }; });
+}
+async function moveZ(z) {
+  await guard();
+  const f = S.z;
+  await tween(Math.max(200, Math.abs(z - f) / pxPerSec() * 1000), p => { S.z = f + (z - f) * p; });
+}
+async function gripper(st) { await guard(); S.grip = st; render(); await sleep(reduce ? 50 : 300); }
+async function sweep(zone) {
+  S.sweep = { zone, p: 0 };
+  await tween(1300, p => { S.sweep.p = p; });
+  S.sweep = null; render();
+}
+
+/* ===== 상태 표시 ===== */
+function setState() {
+  const el = $('#state');
+  let s = 'idle', t = '대기 중';
+  if (S.estop) { s = 'estop'; t = '비상정지'; }
+  else if (S.paused) { s = 'paused'; t = '일시정지'; }
+  else if (S.busy) { s = 'busy'; t = '작업 중: ' + S.busy; }
+  el.dataset.s = s; $('#stateText').textContent = t;
+  const e = $('#estop');
+  e.textContent = S.estop ? '비상정지 해제' : '비상정지';
+  e.classList.toggle('reset', S.estop);
+  $('#pauseBtn').textContent = S.paused ? '재개' : '일시정지';
+  document.querySelectorAll('[data-task]').forEach(b => b.disabled = !!S.busy || S.estop);
+}
+async function runTask(name, fn) {
+  if (S.estop) { log('비상정지 상태입니다. 해제한 뒤 다시 시도하세요.', 'warn'); return; }
+  if (S.busy) { log(`“${S.busy}” 작업이 진행 중입니다. 끝난 뒤 다시 시도하세요.`, 'warn'); return; }
+  S.busy = name; setState();
+  try { await fn(); }
+  catch (e) {
+    if (e.message === 'ESTOP') { log(`비상정지로 “${name}” 작업이 중단되었습니다.`, 'danger'); S.carry = null; }
+    else log(e.message, 'danger');
+  }
+  finally {
+    S.cells.forEach(c => { if (c.s === 'target') c.s = 'empty'; });
+    S.busy = false; S.sweep = null; setState(); render();
+  }
+}
+function steps(i, st) {
+  const li = $('#plantSteps').children;
+  if (i === 'reset') { [...li].forEach(l => l.dataset.s = 'wait'); return; }
+  li[i].dataset.s = st;
+}
+
+/* ===== 1단계: 자동 식재 ===== */
+const pct = (lo, hi) => Math.round(lo + Math.random() * (hi - lo));
+async function scan() {
+  steps(0, 'run');
+  await moveZ(300); await moveTo(HOME.x, HOME.y);
+  await sweep('A');
+  S.cells.forEach(c => { if (c.s === 'block') c.s = 'empty'; c.conf = pct(91, 99); });
+  S.scanned = true; render();
+  const empty = S.cells.filter(c => c.s === 'empty').length;
+  log(`빈 영역 판별 완료: 묘목 ${6 - empty}칸, 빈 칸 ${empty}칸`, 'ok');
+  steps(0, 'done');
+}
+function pickTargets(count, spacingMm) {
+  const fixed = S.cells.filter(c => c.s === 'planted');
+  const chosen = [];
+  for (const c of S.cells) {
+    if (c.s !== 'empty') continue;
+    const near = [...fixed, ...chosen].some(o => Math.hypot(o.x - c.x, o.y - c.y) * PX2MM < spacingMm);
+    if (near) { c.s = 'block'; continue; }
+    if (!count || chosen.length < count) chosen.push(c);
+  }
+  return chosen;
+}
+async function plant(count) {
+  const spacing = +$('#spacing').value || 150;
+  rosSend({ type: 'plant', count, spacing_mm: spacing });
+  steps('reset');
+  await scan();
+  steps(1, 'run');
+  const targets = pickTargets(count, spacing);
+  render();
+  const blocked = S.cells.filter(c => c.s === 'block').length;
+  if (blocked) log(`간격 ${spacing}mm 기준으로 ${blocked}칸은 너무 가까워 건너뜁니다.`, 'warn');
+  if (!targets.length) { steps(1, 'fail'); throw new Error('심을 수 있는 빈 칸이 없습니다. 간격 값을 줄이거나 작업대를 초기화하세요.'); }
+  if (count && targets.length < count) log(`요청은 ${count}그루지만 조건에 맞는 칸이 ${targets.length}칸이라 ${targets.length}그루만 심습니다.`, 'warn');
+  targets.forEach(c => c.s = 'target'); render();
+  log(`심을 칸 ${targets.length}곳을 정했습니다.`, 'ok');
+  steps(1, 'done');
+
+  steps(2, 'run');
+  let n = 0;
+  for (const c of targets) {
+    if (S.supply <= 0) { steps(2, 'fail'); throw new Error('공급대에 묘목이 없습니다. 묘목을 채운 뒤 작업대를 초기화하세요.'); }
+    await gripper('open');
+    await moveTo(SUPPLY.x, SUPPLY.y); await moveZ(60); await gripper('close');
+    S.supply--; S.carry = 'sprout'; render();
+    await moveZ(300); await moveTo(c.x, c.y); await moveZ(80);
+    await gripper('open'); S.carry = null; c.s = 'planted'; c.conf = pct(93, 99); render();
+    await moveZ(300);
+    n++; log(`묘목 ${n}/${targets.length} 식재 완료`);
+  }
+  steps(2, 'done');
+
+  steps(3, 'run');
+  await moveTo(HOME.x, HOME.y); await sweep('A');
+  S.cells.forEach(c => { if (c.s === 'block') c.s = 'empty'; });
+  render();
+  log(`결과 확인 완료: 묘목 ${n}그루를 심었고, 지금 ${S.cells.filter(c => c.s === 'planted').length}/6칸이 차 있습니다.`, 'ok');
+  steps(3, 'done');
+}
+
+/* ===== 3단계: 성숙도 분류 ===== */
+async function classify() {
+  rosSend({ type: 'classify' });
+  await moveZ(300); await moveTo(600, 300);
+  await sweep('B');
+  S.berries.forEach(b => { if (!b.picked) { b.classified = true; b.conf = pct(88, 99); } });
+  render();
+  const left = S.berries.filter(b => !b.picked);
+  const r = left.filter(b => b.ripe).length;
+  $('#classifyResult').textContent = `익음 ${r}개, 덜 익음 ${left.length - r}개`;
+  log(`성숙도 분류 완료: 익음 ${r}개, 덜 익음 ${left.length - r}개`, 'ok');
+  await moveTo(HOME.x, HOME.y);
+}
+
+/* ===== 4단계: 수확 ===== */
+async function harvest(onlySelected) {
+  if (!S.berries.some(b => b.classified && !b.picked)) await classify();
+  let list = S.berries.filter(b => !b.picked && b.ripe && b.classified);
+  if (onlySelected) list = list.filter(b => b.sel);
+  if (!list.length) throw new Error(onlySelected ? '선택한 익은 열매가 없습니다. 지도에서 빨간 열매를 눌러 고르세요.' : '수확할 익은 열매가 없습니다.');
+  rosSend({ type: 'harvest', berry_ids: list.map(b => b.id) });
+  let n = 0;
+  for (const b of list) {
+    await gripper('open'); await moveZ(300);
+    await moveTo(b.x, b.y); await moveZ(120); await gripper('close');
+    b.picked = true; b.sel = false; S.carry = 'berry'; render();
+    await moveZ(300); await moveTo(BASKET.x, BASKET.y); await moveZ(150);
+    await gripper('open'); S.carry = null; S.harvested++; render();
+    n++; log(`열매 ${n}/${list.length} 수확 완료`);
+  }
+  await moveZ(300); await moveTo(HOME.x, HOME.y);
+  log(`수확 완료: 이번에 ${n}개, 누적 ${S.harvested}개`, 'ok');
+}
+
+/* ===== 2단계: 음성 명령 ===== */
+const NUM = { '하나': 1, '한': 1, '둘': 2, '두': 2, '셋': 3, '세': 3, '석': 3, '넷': 4, '네': 4, '다섯': 5, '여섯': 6 };
+function parseNum(t) {
+  const m = t.match(/(\d+)\s*(그루|개|칸|포기)?/); if (m) return +m[1];
+  for (const k of ['다섯', '여섯', '하나', '둘', '셋', '넷', '한', '두', '세', '석', '네'])
+    if (new RegExp(k + '\\s*(그루|개|칸|포기)').test(t)) return NUM[k];
+  return 0;
+}
+function interpret(t) {
+  if (/멈춰|멈춤|정지|스톱|그만/.test(t)) return { kind: 'stop' };
+  if (/수확|따\s?줘|따와/.test(t)) return { kind: 'harvest', summary: '익은 열매 모두 수확', detail: '성숙도를 확인한 뒤 익은 열매만 집어서 수확함으로 옮깁니다.' };
+  if (/심어|식재|심기|심을/.test(t)) {
+    const n = Math.min(parseNum(t), 6);
+    return { kind: 'plant', count: n, summary: `묘목 ${n ? n + '그루' : '빈 칸 모두'} 식재`, detail: `빈 칸을 판별하고 최소 간격 ${$('#spacing').value}mm를 지켜 심습니다.` };
+  }
+  if (/분류|익었|성숙|익은지/.test(t)) return { kind: 'classify', summary: '열매 성숙도 분류', detail: '카메라로 열매를 촬영해 익음과 덜 익음으로 나눕니다.' };
+  if (/홈|원위치|제자리|돌아가/.test(t)) return { kind: 'home', summary: '홈 위치로 이동', detail: '로봇팔을 기본 자세로 돌려놓습니다.' };
+  if (/상태|어때|알려|진행/.test(t)) return { kind: 'status' };
+  return null;
+}
+function bubble(who, text) {
+  const d = document.createElement('div');
+  d.className = 'bubble ' + (who === 'me' ? 'me' : 'bot');
+  d.textContent = text; $('#chat').appendChild(d); $('#chat').scrollTop = 1e6;
+}
+function statusText() {
+  const p = S.cells.filter(c => c.s === 'planted').length;
+  const left = S.berries.filter(b => !b.picked);
+  const ripe = S.berries.some(b => b.classified) ? `익은 열매 ${left.filter(b => b.ripe).length}개 남음` : '열매는 아직 분류 전';
+  const now = S.estop ? '비상정지 상태' : S.paused ? '일시정지 상태' : S.busy ? `“${S.busy}” 작업 중` : '대기 중';
+  return `로봇은 ${now}입니다. 식재 ${p}/6칸, 공급대 묘목 ${S.supply}개, ${ripe}, 누적 수확 ${S.harvested}개예요.`;
+}
+function handleCommand(text) {
+  text = text.trim(); if (!text) return;
+  bubble('me', text); $('#voiceText').value = '';
+  if (S.mode === 'ros') {
+    if (/멈춰|멈춤|정지|스톱|그만/.test(text)) { setPaused(true); bubble('bot', '일시정지했어요. 이어서 하려면 “재개”를 누르세요.'); return; }
+    rosSend({ type: 'voice', text }); bubble('bot', '해석하고 있어요…'); return;
+  }
+  const plan = interpret(text);
+  if (!plan) { bubble('bot', '명령을 이해하지 못했어요. 예: “묘목 두 그루 심어줘”, “현재 상태 알려줘”'); return; }
+  if (plan.kind === 'status') { bubble('bot', statusText()); return; }
+  if (plan.kind === 'stop') { setPaused(true); bubble('bot', '일시정지했어요. 이어서 하려면 “재개”를 누르세요.'); return; }
+  showPlan(plan);
+}
+function showPlan(plan) {
+  S.pendingPlan = plan;
+  $('#planBox').innerHTML = `<div class="plan" role="alertdialog" aria-label="작업 승인">
+    <h3>이렇게 이해했어요: ${plan.summary}</h3><p>${plan.detail || ''} 실행할까요?</p>
+    <div class="row"><button class="btn primary" id="approve">승인하고 실행</button><button class="btn" id="reject">취소</button></div></div>`;
+  bubble('bot', `“${plan.summary}” 작업을 준비했어요. 승인하면 시작합니다.`);
+  $('#approve').onclick = () => approvePlan(true);
+  $('#reject').onclick = () => approvePlan(false);
+  $('#approve').focus();
+}
+function approvePlan(ok) {
+  const p = S.pendingPlan;
+  if (!p) return;
+  if (ok && !p.remote && (S.busy || S.estop)) {
+    bubble('bot', S.estop ? '비상정지 상태예요. 해제한 뒤 다시 승인해 주세요.' : `지금은 “${S.busy}” 작업 중이에요. 끝난 뒤 다시 승인을 눌러 주세요.`);
+    return;
+  }
+  S.pendingPlan = null; $('#planBox').innerHTML = '';
+  if (!ok) { if (p.remote) rosSend({ type: 'reject', plan_id: p.id }); bubble('bot', '취소했어요.'); log(`음성 명령 취소: ${p.summary}`, 'warn'); return; }
+  log(`음성 명령 승인: ${p.summary}`, 'ok');
+  if (p.remote) { rosSend({ type: 'approve', plan_id: p.id }); return; }
+  bubble('bot', '승인됐어요. 작업을 시작합니다.');
+  if (p.kind === 'plant') runTask('묘목 식재', () => plant(p.count));
+  if (p.kind === 'harvest') runTask('열매 수확', () => harvest(false));
+  if (p.kind === 'classify') runTask('성숙도 분류', classify);
+  if (p.kind === 'home') goHome();
+}
+/* 연결 모드: 녹음해서 음성·LLM 노드(Whisper)로 보냄 */
+let mediaRec = null, recTimer = null;
+const blobToB64 = blob => new Promise((res, rej) => {
+  const r = new FileReader();
+  r.onload = () => res(String(r.result).split(',')[1]);
+  r.onerror = () => rej(new Error('녹음 파일을 읽지 못했습니다'));
+  r.readAsDataURL(blob);
+});
+async function toggleRecord() {
+  if (mediaRec) { mediaRec.stop(); return; }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined')
+    return log('이 주소에서는 마이크를 쓸 수 없어요. http://localhost 주소로 열어 주세요.', 'warn');
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+  catch (e) { return log(`마이크를 쓸 수 없어요(${e.name}). 브라우저 주소창 옆 마이크 권한을 허용하세요.`, 'warn'); }
+  const chunks = [];
+  const rec = new MediaRecorder(stream);
+  mediaRec = rec;
+  rec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+  rec.onstop = async () => {
+    clearTimeout(recTimer); mediaRec = null;
+    stream.getTracks().forEach(t => t.stop());
+    $('#micBtn').classList.remove('on');
+    const blob = new Blob(chunks, { type: rec.mimeType || 'audio/webm' });
+    if (blob.size < 2000) return log('녹음이 너무 짧아요. 마이크를 누르고 말한 뒤 다시 누르세요.', 'warn');
+    try {
+      rosSend({ type: 'voice_audio', mime: blob.type, data: await blobToB64(blob) });
+      bubble('bot', '들은 내용을 해석하고 있어요…');
+    } catch (e) { log(e.message, 'danger'); }
+  };
+  rec.start();
+  $('#micBtn').classList.add('on');
+  log('녹음 중입니다. 다 말했으면 마이크 버튼을 다시 누르세요. (최대 15초)');
+  recTimer = setTimeout(() => { if (mediaRec) mediaRec.stop(); }, 15000);
+}
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec = null;
+$('#micBtn').onclick = () => {
+  if (S.mode === 'ros') return toggleRecord();
+  if (!SR) { log('이 브라우저는 음성 인식을 지원하지 않아요. 크롬에서 열거나 글자로 입력하세요.', 'warn'); return; }
+  if (rec) { rec.stop(); return; }
+  rec = new SR(); rec.lang = 'ko-KR'; rec.interimResults = true;
+  $('#micBtn').classList.add('on');
+  rec.onresult = e => {
+    const r = e.results[e.results.length - 1];
+    $('#voiceText').value = r[0].transcript;
+    if (r.isFinal) handleCommand(r[0].transcript);
+  };
+  rec.onerror = e => log(`마이크를 쓸 수 없어요(${e.error}). 글자로 입력해 주세요.`, 'warn');
+  rec.onend = () => { rec = null; $('#micBtn').classList.remove('on'); };
+  rec.start();
+};
+$('#sendBtn').onclick = () => handleCommand($('#voiceText').value);
+$('#voiceText').onkeydown = e => { if (e.key === 'Enter' && !e.isComposing) handleCommand(e.target.value); };
+$('#chips').onclick = e => { if (e.target.matches('.chip')) handleCommand(e.target.textContent); };
+
+/* ===== 수동 조작·비상정지 ===== */
+function goHome() { if (S.mode === 'ros') return remote({ type: 'home' }, '홈 위치 이동'); runTask('홈 위치 이동', async () => { await gripper('open'); await moveZ(300); await moveTo(HOME.x, HOME.y); log('홈 위치에 도착했습니다.', 'ok'); }); }
+function setPaused(v) {
+  if (S.estop) return;
+  S.paused = v; rosSend({ type: v ? 'pause' : 'resume' });
+  log(v ? '일시정지했습니다.' : '작업을 다시 시작합니다.', v ? 'warn' : 'ok'); setState();
+}
+function toggleEstop() {
+  if (!S.estop) {
+    S.estop = true; S.paused = false; rosSend({ type: 'estop' });
+    log('비상정지! 모든 동작을 멈췄습니다.', 'danger');
+  } else {
+    S.estop = false; S.carry = null; rosSend({ type: 'estop_reset' });
+    log('비상정지를 해제했습니다. 주변 안전을 확인한 뒤 홈 위치로 이동하세요.', 'warn');
+  }
+  setState(); render();
+}
+$('#estop').onclick = toggleEstop;
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !S.estop) toggleEstop(); });
+$('#homeBtn').onclick = goHome;
+$('#pauseBtn').onclick = () => setPaused(!S.paused);
+$('#gOpenBtn').onclick = () => { if (S.busy || S.estop) return log('작업 중이거나 비상정지 상태라 그리퍼를 움직일 수 없어요.', 'warn'); S.grip = 'open'; rosSend({ type: 'gripper', state: 'open' }); render(); log('그리퍼 열림'); };
+$('#gCloseBtn').onclick = () => { if (S.busy || S.estop) return log('작업 중이거나 비상정지 상태라 그리퍼를 움직일 수 없어요.', 'warn'); S.grip = 'close'; rosSend({ type: 'gripper', state: 'close' }); render(); log('그리퍼 닫힘'); };
+$('#speed').oninput = e => { S.speed = +e.target.value; $('#speedVal').textContent = S.speed + '%'; };
+$('#speed').onchange = () => rosSend({ type: 'speed', percent: S.speed });
+
+/* ===== 작업 버튼 ===== */
+['#scanBtn', '#plantBtn', '#classifyBtn', '#harvestSelBtn', '#harvestAllBtn', '#homeBtn', '#resetBtn'].forEach(id => $(id).dataset.task = '1');
+const isRos = () => S.mode === 'ros';
+$('#scanBtn').onclick = () => isRos() ? remote({ type: 'scan' }, '빈 칸 판별') : runTask('빈 칸 판별', async () => { steps('reset'); await scan(); });
+$('#plantBtn').onclick = () => isRos()
+  ? remote({ type: 'plant', count: +$('#plantCount').value, spacing_mm: +$('#spacing').value || 150 }, '묘목 식재')
+  : runTask('묘목 식재', () => plant(+$('#plantCount').value));
+$('#classifyBtn').onclick = () => isRos() ? remote({ type: 'classify' }, '성숙도 분류') : runTask('성숙도 분류', classify);
+$('#harvestSelBtn').onclick = () => {
+  if (!isRos()) return runTask('열매 수확', () => harvest(true));
+  const ids = S.berries.filter(b => b.sel && !b.picked).map(b => b.id);
+  if (!ids.length) return log('선택한 익은 열매가 없습니다. 지도에서 빨간 열매를 눌러 고르세요.', 'warn');
+  remote({ type: 'harvest', berry_ids: ids }, '열매 수확');
+};
+$('#harvestAllBtn').onclick = () => isRos() ? remote({ type: 'harvest' }, '열매 수확') : runTask('열매 수확', () => harvest(false));
+$('#resetBtn').onclick = () => {
+  if (S.busy) return;
+  if (isRos()) return remote({ type: 'reset_counts' }, '작업대 기록 초기화');
+  Object.assign(S, { cells: initCells(), berries: initBerries(), scanned: false, supply: 6, harvested: 0, tip: { ...HOME }, z: 300, grip: 'open', carry: null });
+  steps('reset'); $('#classifyResult').textContent = '아직 분류하지 않았어요.';
+  drawTree(); render(); log('작업대를 처음 상태로 되돌렸습니다.');
+};
+$('#map').addEventListener('click', e => {
+  const id = e.target.dataset && e.target.dataset.id; if (id === undefined) return;
+  const b = S.berries[+id];
+  if (!b.classified) { log('먼저 성숙도 분류를 해 주세요.', 'warn'); return; }
+  if (!b.ripe) { log('덜 익은 열매는 고를 수 없어요.', 'warn'); return; }
+  b.sel = !b.sel; render();
+});
+
+/* ===== 탭 ===== */
+const tabs = [...document.querySelectorAll('[role="tab"]')];
+tabs.forEach((t, i) => {
+  t.onclick = () => tabs.forEach(o => { const on = o === t; o.setAttribute('aria-selected', on); $('#' + o.getAttribute('aria-controls')).hidden = !on; });
+  t.onkeydown = e => {
+    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+    const n = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length]; n.click(); n.focus();
+  };
+});
+
+/* ===== ROS 2 연결 (rosbridge) ===== */
+let ros = null, cmdTopic = null;
+function rosSend(obj) {
+  if (S.mode !== 'ros' || !cmdTopic) return;
+  cmdTopic.publish(new ROSLIB.Message({ data: JSON.stringify(obj) }));
+}
+// 연결 모드: 버튼은 명령만 보내고, 결과는 로봇이 보내는 메시지로 그림
+function remote(cmd, label) {
+  if (S.estop) return log('비상정지 상태입니다. 해제한 뒤 다시 시도하세요.', 'warn');
+  if (S.busy) return log(`“${S.busy}” 작업이 진행 중입니다. 끝난 뒤 다시 시도하세요.`, 'warn');
+  rosSend(cmd);
+  log(`로봇에 “${label}” 명령을 보냈습니다.`);
+}
+const ZONE_PT = { home: HOME, supply: SUPPLY, basket: BASKET, berry_view: { x: 600, y: 300 } };
+let focusTok = 0;
+function focusArm(d) {
+  let pt = ZONE_PT[d.kind];
+  if (d.kind === 'cell') pt = S.cells[d.index];
+  if (d.kind === 'berry') pt = S.berries.find(b => b.id === d.index);
+  if (!pt) return;
+  const tok = ++focusTok, f = { ...S.tip };
+  tween(700, p => { if (tok === focusTok) S.tip = { x: f.x + (pt.x - f.x) * p, y: f.y + (pt.y - f.y) * p }; }).catch(() => {});
+}
+function applyScene(d) {
+  if (Array.isArray(d.cells)) {
+    d.cells.forEach((c, i) => { if (S.cells[i]) { S.cells[i].s = c.s; S.cells[i].conf = c.conf; } });
+    S.scanned = d.cells.some(c => c.s !== 'unknown');
+  }
+  if (Array.isArray(d.berries)) {
+    const sel = new Set(S.berries.filter(b => b.sel).map(b => b.id));
+    S.berries = d.berries.map(b => ({ id: b.id, x: 470 + b.u * 280, y: 70 + b.v * 222, ripe: b.ripe, conf: b.conf,
+      picked: b.picked, classified: true, sel: sel.has(b.id) && !b.picked }));
+    drawTree();
+    const left = S.berries.filter(b => !b.picked), r = left.filter(b => b.ripe).length;
+    $('#classifyResult').textContent = S.berries.length ? `익음 ${r}개, 덜 익음 ${left.length - r}개` : '아직 분류하지 않았어요.';
+  }
+  if (typeof d.supply === 'number') S.supply = d.supply;
+  if (typeof d.harvested === 'number') S.harvested = d.harvested;
+  render();
+}
+function setMode(m) {
+  S.mode = m;
+  const b = $('#modeBadge');
+  b.textContent = m === 'ros' ? 'ROS 2 연결됨' : '시뮬레이션';
+  b.classList.toggle('ros', m === 'ros');
+  $('#connBtn').textContent = m === 'ros' ? '연결 끊기' : '연결';
+  if (m !== 'ros') { S.realJoints = null; S.busy = false; $('#jointSrc').textContent = '미리보기 값'; setState(); }
+  render();
+}
+$('#connBtn').onclick = () => {
+  if (S.mode === 'ros' && ros) { ros.close(); return; }
+  if (typeof ROSLIB === 'undefined') { log('ROS 연결 도구를 불러오지 못했습니다. 인터넷 연결을 확인하세요.', 'danger'); return; }
+  const url = $('#rosUrl').value.trim();
+  log(`${url}에 연결을 시도합니다.`);
+  try { ros = new ROSLIB.Ros({ url }); }
+  catch (e) { log('주소 형식이 올바르지 않습니다. 예: ws://192.168.0.10:9090', 'danger'); return; }
+  ros.on('connection', () => {
+    setMode('ros'); log('ROS 2에 연결했습니다. 이제 버튼은 로봇에 명령을 보내고, 지도는 로봇이 보낸 감지 결과로 바뀝니다.', 'ok');
+    const T = CONFIG.topics;
+    cmdTopic = new ROSLIB.Topic({ ros, name: T.command.name, messageType: T.command.type });
+    new ROSLIB.Topic({ ros, name: T.status.name, messageType: T.status.type }).subscribe(m => {
+      let d; try { d = JSON.parse(m.data); } catch { log(m.data); return; }
+      if (d.type === 'plan') showPlan({ remote: true, id: d.id, summary: d.summary, detail: d.detail });
+      else if (d.type === 'reply') bubble('bot', d.text);
+      else if (d.type === 'heard') bubble('me', `🎙 ${d.text}`);
+      else if (d.type === 'state') { S.busy = d.busy || false; setState(); }
+      else if (d.type === 'step') steps(d.index, d.state);
+      else if (d.type === 'scene') applyScene(d);
+      else if (d.type === 'focus') focusArm(d);
+      else log(d.text || m.data, d.level || 'info');
+    });
+    new ROSLIB.Topic({ ros, name: T.joints.name, messageType: T.joints.type, throttle_rate: 100 }).subscribe(m => {
+      S.realJoints = m.position.slice(0, 6).map(r => deg(r));
+      $('#jointSrc').textContent = '실제 로봇 값'; render();
+    });
+    setTimeout(() => rosSend({ type: 'hello' }), 500);
+  });
+  ros.on('error', () => log(`${url}에 연결하지 못했습니다. rosbridge가 켜져 있는지, 주소가 맞는지 확인하세요. 시뮬레이션으로 계속합니다.`, 'warn'));
+  ros.on('close', () => { if (S.mode === 'ros') log('ROS 2 연결이 끊겼습니다. 시뮬레이션으로 전환합니다.', 'warn'); cmdTopic = null; setMode('sim'); });
+};
+
+/* ===== 시작 ===== */
+drawTree(); render(); setState();
+log('관제 화면을 열었습니다. 시뮬레이션 모드로 시작합니다.');
+</script>
+</body>
+</html>
