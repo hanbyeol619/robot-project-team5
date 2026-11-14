@@ -73,7 +73,7 @@ def generate_launch_description():
              condition=IfCondition(voice)),
         Node(package='seedling_llm', executable='llm_node', output='screen',
              condition=IfCondition(voice)),
-        # 관제 UI 채팅·마이크 버튼 → 해석 → 승인 카드 → 실행 (UI v2)
+        # 관제 UI 채팅·마이크 버튼 → 해석 → 바로 실행 (UI v2)
         Node(package='seedling_llm', executable='voice_llm_node', output='screen',
              condition=IfCondition(ui)),
 
