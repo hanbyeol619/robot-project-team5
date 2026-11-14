@@ -1,0 +1,54 @@
+{
+    "reference_image_size": [
+        1280,
+        720
+    ],
+    "roi": [
+        465,
+        56,
+        386,
+        478
+    ],
+    "objects": [
+        {
+            "id": "01",
+            "label": "round_object_01",
+            "bbox_roi": [
+                23,
+                70,
+                103,
+                145
+            ]
+        },
+        {
+            "id": "02",
+            "label": "leafy_plant_02",
+            "bbox_roi": [
+                207,
+                40,
+                323,
+                168
+            ]
+        },
+        {
+            "id": "03",
+            "label": "yellow_plant_03",
+            "bbox_roi": [
+                27,
+                230,
+                139,
+                342
+            ]
+        },
+        {
+            "id": "04",
+            "label": "round_object_04",
+            "bbox_roi": [
+                242,
+                235,
+                312,
+                325
+            ]
+        }
+    ]
+}

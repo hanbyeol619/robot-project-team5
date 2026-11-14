@@ -1,0 +1,218 @@
+import sys
+import time
+import rclpy
+import DR_init
+from std_srvs.srv import Trigger
+
+from robot_control.program_runner import parse_program, describe
+from robot_control.robot_guard import Guard
+
+ROBOT_ID = "dsr01"
+ROBOT_MODEL = "e0509"
+DR_init.__dsr__id = ROBOT_ID
+DR_init.__dsr__model = ROBOT_MODEL
+
+VEL = [50.0, 50.0]   # movel 속도 [mm/s, deg/s] — 프로그램의 vel 이 더 빨라도 이 값까지만
+ACC = [100.0, 60.0]
+VELJ = 30.0          # movej 관절 속도 (deg/s) — 프로그램의 vel 이 더 빨라도 이 값까지만
+ACCJ = VELJ * 2      # movej 관절 가속도 (deg/s^2)
+GRIP_WAIT = 1.0      # 그리퍼 동작 후 대기 시간 (초)
+REPEAT = 1           # 전체 반복 횟수
+
+# ────────────────────────────────────────────────────────────
+# 방법 1) PROGRAM: Creator3D 「코드 보기」 의 코드를 """ """ 사이에 그대로 붙여넣으세요.
+#   movej(posj(...)), movel(posx(...)), gripper(퍼센트), wait(초), home(), vel = 30 을 읽어요.
+#   gripper 는 50 이상 = 열기, 50 미만 = 닫기 (그리퍼 서비스는 열기/닫기만 있어요).
+#   PROGRAM 이 비어 있지 않으면 아래 SEQUENCE 대신 PROGRAM 을 실행해요.
+PROGRAM = """
+vel = 20
+home()
+movel(posx(393, -410, 405, 134, 180, 134), vel=30)   # ② A 위
+movel(posx(393, -410, 125, 134, 180, 134), vel=20)   # ③ 곧게 내려가기
+movel(posx(393, -440, 125, 134, 180, 134), vel=10)   # ③ 병 쪽으로 30mm 밀어 넣기
+gripper(22)                                          # ④ 잡기
+movel(posx(393, -440, 325, 134, 180, 134), vel=20)   # ⑤ 곧게 들어 올리기
+movel(posx(393, -270, 345, 134, 180, 134), vel=20)   # ⑥ 식물 쪽으로
+movel(posx(233, -270, 345, 134, 180, 134), vel=20)   # ⑦ 식물 위
+gripper(15)                                          # ⑧ 짜기 (지금은 '닫기'와 같아요)
+wait(2)                                              # ⑧ 물 주는 시간
+gripper(35)                                          # ⑧ 다시 잡는 힘으로
+movel(posx(408, -270, 345, 134, 180, 134), vel=20)   # ⑨ 돌아가기
+movel(posx(408, -400, 345, 134, 180, 134), vel=20)   # ⑨ 놓는 자리 위
+movel(posx(408, -400, 145, 134, 180, 134), vel=20)   # ⑨ 곧게 내려가기
+movel(posx(408, -420, 145, 134, 180, 134), vel=10)   # ⑨ 놓는 자리로 밀어 넣기
+gripper(100)                                         # ⑩ 놓기
+movel(posx(408, -400, 145, 134, 180, 134), vel=10)   # ⑩ 옆으로 빠지기
+movel(posx(408, -400, 345, 134, 180, 134), vel=20)   # ⑩ 위로
+home()
+"""
+
+# 방법 2) SEQUENCE: 직접 적기
+#   [x, y, z, rx, ry, rz]  → 베이스 기준 절대좌표로 직선 이동 (mm, deg)  = movel
+#   ("j", [j1, ..., j6])    → 관절 각도로 이동 (deg)                       = movej
+#   "close" / "open"       → 그리퍼 닫기 / 열기
+#   ("wait", 초)           → 대기
+#
+# 좌표 얻는 법: PROGRAM 과 SEQUENCE 를 모두 비워둔 채 실행하면 현재 위치만 출력하고 끝나요.
+SEQUENCE = [
+    "open",                                   # 원본: gripper(50) 반만 열기 → 서비스는 열기/닫기만 있음
+]
+
+# 관절 한계 보호: 실행 전에 모든 단계를 미리 계산해서, 한 곳이라도 한계(J2·J3·J5 ±130°)를
+# 넘으면 아예 시작하지 않아요. 실행 중에도 movel 은 실제 위치에서 경로를 다시 확인해요.
+#   ros2 run robot_control move_basic --check   → 확인만 하고 움직이지 않음
+# ────────────────────────────────────────────────────────────
+
+
+def sequence_to_steps(seq):
+    """SEQUENCE 형식 → parse_program 과 같은 단계 목록"""
+    steps = []
+    for n, s in enumerate(seq, 1):
+        if isinstance(s, str):
+            if s not in ("open", "close"):
+                raise ValueError(f"SEQUENCE {n}번째: 알 수 없는 명령 '{s}'")
+            st = {"kind": "grip", "g": 100.0 if s == "open" else 0.0}
+        elif isinstance(s, tuple) and s[0] == "j":
+            st = {"kind": "movej", "pos": [float(v) for v in s[1]], "vel": VELJ, "acc": ACCJ}
+        elif isinstance(s, tuple) and s[0] == "wait":
+            st = {"kind": "wait", "s": float(s[1])}
+        elif isinstance(s, (list, tuple)) and len(s) == 6:
+            st = {"kind": "movel", "pos": [float(v) for v in s], "vel": VEL[0], "acc": ACC[0]}
+        else:
+            raise ValueError(f"SEQUENCE {n}번째를 이해할 수 없어요: {s}")
+        st.update(line=n, src=str(s), note="")
+        steps.append(st)
+    return steps
+
+
+def call_gripper(node, client, name):
+    """그리퍼 서비스 호출 (open / close)"""
+    if not client.wait_for_service(timeout_sec=3.0):
+        node.get_logger().error(f"gripper/{name} 서비스를 찾을 수 없음")
+        return False
+    future = client.call_async(Trigger.Request())
+    rclpy.spin_until_future_complete(node, future, timeout_sec=5.0)
+    res = future.result()
+    if res is None:
+        node.get_logger().error(f"gripper/{name} 응답 없음")
+        return False
+    print(f"그리퍼 {name}: success={res.success}, msg='{res.message}'")
+    time.sleep(GRIP_WAIT)
+    return res.success
+
+
+def main(args=None):
+    check_only = "--check" in sys.argv
+    rclpy.init(args=args)
+    node = rclpy.create_node("move_basic", namespace=ROBOT_ID)
+    DR_init.__dsr__node = node
+
+    import DSR_ROBOT2 as dr
+    from DSR_ROBOT2 import movel, posx, get_current_posx, get_current_posj, movej, posj, mwait, fkin
+    from DSR_ROBOT2 import set_robot_mode, ROBOT_MODE_AUTONOMOUS, DR_BASE
+
+    guard = Guard(node, dr)
+
+    # 그리퍼 서비스 클라이언트 (네임스페이스 dsr01 기준 → /dsr01/gripper/...)
+    grippers = {
+        "open": node.create_client(Trigger, "gripper/open"),
+        "close": node.create_client(Trigger, "gripper/close"),
+    }
+
+    try:
+        guard.wait_for_driver()
+
+        cur = list(get_current_posx()[0])        # [x, y, z, rx, ry, rz]
+        print("현재 위치 (복사해서 SEQUENCE에 붙여넣기):")
+        print("    [" + ", ".join(f"{v:.1f}" for v in cur) + "],")
+        print("    (\"j\", [" + ", ".join(f"{v:.1f}" for v in get_current_posj()) + "]),")
+
+        try:
+            steps = parse_program(PROGRAM, default_vel=VELJ, gripper=True) if PROGRAM.strip() \
+                else sequence_to_steps(SEQUENCE)
+        except ValueError as e:
+            print(f"코드 오류: {e}")
+            return
+        source = "PROGRAM" if PROGRAM.strip() else "SEQUENCE"
+        if not steps:
+            print(f"{source}가 비어 있어서 이동하지 않고 종료합니다.")
+            return
+
+        # ── 미리 확인: 모든 단계를 순서대로 따라가며 관절 한계 계산 (로봇은 안 움직임) ──
+        print(f"\n{source} {len(steps)}단계를 미리 확인하는 중...")
+        problems = []
+        pose_x = cur
+        for i, st in enumerate(steps, 1):
+            if st["kind"] == "movej":
+                bad = guard.joint_violations(st["pos"])
+                if bad:
+                    problems.append(f"  {i}단계 ({st['line']}번째 줄) movej: " + ", ".join(bad))
+                fk = fkin(st["pos"], DR_BASE)
+                if not isinstance(fk, int):        # 실패하면 -1 (int), 성공하면 배열
+                    pose_x = [float(v) for v in fk]
+            elif st["kind"] == "movel":
+                ok, why = guard.check_line(pose_x, st["pos"])
+                if not ok:
+                    problems.append(f"  {i}단계 ({st['line']}번째 줄) movel: {why}")
+                pose_x = list(st["pos"])
+        for i, st in enumerate(steps, 1):
+            print(f"  {i:3d}. {describe(st)}")
+        if problems:
+            print("\n⚠ 관절 한계에 걸리는 단계가 있어서 시작하지 않아요:")
+            print("\n".join(problems))
+            print("(값을 고치거나, 그 앞에 movej 로 자세를 바꿔 주세요)")
+            return
+        print("\n✅ 모든 단계가 관절 한계 안쪽이에요")
+        if check_only:
+            print("--check: 확인만 하고 끝냅니다 (로봇은 움직이지 않았어요)")
+            return
+
+        set_robot_mode(ROBOT_MODE_AUTONOMOUS)
+        input(f"\n위 동작을 {REPEAT}회 실행합니다. Enter = 시작, Ctrl+C = 취소 ")
+
+        for r in range(REPEAT):
+            for n, st in enumerate(steps, 1):
+                tag = f"[{r+1}/{REPEAT}] {n}/{len(steps)}"
+                k = st["kind"]
+                if k == "grip":
+                    name = "open" if st["g"] >= 50 else "close"
+                    print(f"{tag} 그리퍼 {name}")
+                    call_gripper(node, grippers[name], name)
+                    continue
+                if k == "wait":
+                    print(f"{tag} {st['s']:g}초 대기")
+                    time.sleep(st["s"])
+                    continue
+                if k == "skip":
+                    continue
+                if k == "movej":
+                    bad = guard.joint_violations(st["pos"])
+                    if bad:
+                        print(f"{tag} 관절 한계로 멈춤: {', '.join(bad)}")
+                        return
+                    v = min(st["vel"], VELJ)
+                    print(f"{tag} 관절 이동 → {st['pos']}")
+                    res = movej(posj(*st["pos"]), vel=v, acc=min(st["acc"], v * 2))
+                else:  # movel: 실제 위치에서 경로를 다시 확인
+                    ok, why = guard.check_line(list(get_current_posx()[0]), st["pos"])
+                    if not ok:
+                        print(f"{tag} 관절 한계로 멈춤: {why}")
+                        return
+                    v = min(st["vel"], VEL[0])
+                    print(f"{tag} 직선 이동 → {st['pos']}")
+                    res = movel(posx(*st["pos"]), vel=[v, VEL[1]], acc=[min(st["acc"], v * 2), ACC[1]], ref=DR_BASE)
+                mwait()
+                if res != 0:
+                    print(f"{tag} 로봇이 이동을 거부했어요 (결과 {res}) — 로봇 상태(보호정지·한계)를 확인하세요")
+                    return
+
+        print("완료")
+
+    except KeyboardInterrupt:
+        print("중단")
+    finally:
+        rclpy.shutdown()
+
+
+if __name__ == "__main__":
+    main()
